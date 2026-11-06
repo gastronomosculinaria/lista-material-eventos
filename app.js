@@ -4,6 +4,14 @@ var CORE = (function () {
   var CATEGORIAS = ['Copos', 'Taças de vidro', 'Taças de cristal', 'Bandejas', 'Pratos', 'Talheres',
     'Equipamentos', 'Gás', 'Utensílios', 'Outros'];
   var SENHA_MASTER_INICIAL = 'trocar123';
+  var GRUPOS = ['Material', 'Caixa de secos', 'Caixa de talher'];
+  function grupoDe(i) { return i.grupo || 'Material'; }
+  function listaGrupos(db, itens) {
+    var g = GRUPOS.slice();
+    json(getConfig(db, 'grupos'), []).forEach(function (x) { if (g.indexOf(x) < 0) g.push(x); });
+    itens.forEach(function (i) { var x = grupoDe(i); if (g.indexOf(x) < 0) g.push(x); });
+    return g;
+  }
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function agora() { return new Date().toISOString(); }
@@ -101,7 +109,7 @@ var CORE = (function () {
       var res = reservas(db);
       var itens = db.all('itens').filter(function (i) { return sim(i.ativo); }).map(function (i) {
         var total = num(i.qtd_total);
-        return { id: i.id, nome: i.nome, categoria: i.categoria, descricao: i.descricao, foto: i.foto,
+        return { id: i.id, nome: i.nome, categoria: i.categoria, descricao: i.descricao, foto: i.foto, grupo: grupoDe(i),
           qtd_total: total, disponivel: total - (res[i.id] || 0) };
       });
       var linhas = db.all('evento_itens');
@@ -116,7 +124,7 @@ var CORE = (function () {
               justificativa: l.justificativa };
           }) };
       });
-      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda };
+      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens) };
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
@@ -155,7 +163,7 @@ var CORE = (function () {
       var it = p.item || {};
       var nome = texto(it.nome, 120);
       if (!nome) falha('Dê um nome ao item.');
-      var dados = { nome: nome, categoria: texto(it.categoria, 60) || 'Outros', descricao: texto(it.descricao, 500),
+      var dados = { nome: nome, categoria: texto(it.categoria, 60) || 'Outros', descricao: texto(it.descricao, 500), grupo: texto(it.grupo, 60) || 'Material',
         qtd_total: String(Math.max(0, Math.round(num(it.qtd_total)))) };
       if (it.fotoNova) dados.foto = db.salvarFoto(it.fotoNova, nome);
       if (it.id) {
@@ -163,7 +171,7 @@ var CORE = (function () {
         if (!antes) falha('Item não encontrado.');
         db.update('itens', it.id, dados);
         var mud = [];
-        ['nome', 'categoria', 'descricao', 'qtd_total'].forEach(function (k) {
+        ['nome', 'grupo', 'categoria', 'descricao', 'qtd_total'].forEach(function (k) {
           if (String(antes[k]) !== String(dados[k])) mud.push(k + ': "' + antes[k] + '" → "' + dados[k] + '"');
         });
         if (dados.foto) mud.push('nova foto');
@@ -175,6 +183,52 @@ var CORE = (function () {
       db.insert('itens', dados);
       log(db, quem, 'Incluiu item no inventário', nome + ' (' + dados.qtd_total + ' un., ' + dados.categoria + ')');
       return { id: dados.id };
+    },
+
+    salvarVarios: function (db, p, s, quem) {
+      pedeInventario(s);
+      var grupo = texto(p.grupo, 60) || 'Material', cat = texto(p.categoria, 60) || 'Outros';
+      var existentes = {};
+      db.all('itens').forEach(function (i) { if (sim(i.ativo)) existentes[String(i.nome).trim().toLowerCase()] = true; });
+      var novos = [], repetidos = 0;
+      String(p.texto || '').split(/\r?\n/).forEach(function (linha) {
+        var partes = linha.split(/\t|;/);
+        var nome = texto(partes[0], 120).replace(/\s+/g, ' ');
+        if (!nome) return;
+        var k = nome.toLowerCase();
+        if (existentes[k]) { repetidos++; return; }
+        existentes[k] = true;
+        var q = Math.max(0, Math.round(num(partes[1] || 0)));
+        novos.push({ id: uid(), nome: nome.charAt(0).toUpperCase() + nome.slice(1), categoria: cat, descricao: '', foto: '', grupo: grupo,
+          qtd_total: String(q), ativo: 'sim', criado_em: agora() });
+      });
+      if (!novos.length) falha(repetidos ? 'Todos esses itens já estão cadastrados.' : 'Cole pelo menos um nome de item.');
+      if (novos.length > 300) falha('Cole no máximo 300 itens por vez.');
+      if (db.insertMany) db.insertMany('itens', novos); else novos.forEach(function (n) { db.insert('itens', n); });
+      log(db, quem, 'Incluiu vários itens no inventário', novos.length + ' itens no grupo ' + grupo + ': ' + novos.map(function (n) { return n.nome; }).join(', '));
+      return { incluidos: novos.length, repetidos: repetidos };
+    },
+
+    moverItens: function (db, p, s, quem) {
+      pedeInventario(s);
+      var grupo = texto(p.grupo, 60);
+      if (!grupo) falha('Escolha o grupo.');
+      var itens = db.all('itens'), nomes = [];
+      (p.ids || []).forEach(function (id) {
+        var it = porId(itens, id);
+        if (it && grupoDe(it) !== grupo) { db.update('itens', id, { grupo: grupo }); nomes.push(it.nome); }
+      });
+      if (nomes.length) log(db, quem, 'Mudou itens de grupo', nomes.join(', ') + ' → ' + grupo);
+      return true;
+    },
+
+    criarGrupo: function (db, p, s, quem) {
+      pedeInventario(s);
+      var g = texto(p.grupo, 60);
+      if (!g) falha('Dê um nome ao grupo.');
+      var lista = json(getConfig(db, 'grupos'), []);
+      if (lista.indexOf(g) < 0 && GRUPOS.indexOf(g) < 0) { lista.push(g); setConfig(db, 'grupos', JSON.stringify(lista)); log(db, quem, 'Criou grupo', g); }
+      return true;
     },
 
     excluirItem: function (db, p, s, quem) {
@@ -403,7 +457,7 @@ var CORE = (function () {
   }
 
   var TABELAS = {
-    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em'],
+    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa'],
@@ -494,6 +548,12 @@ function novoDb_() {
     insert: function (t, o) {
       var sh = aba(t);
       sh.appendRow(linhaDe(t, o));
+      delete cache[t];
+    },
+    insertMany: function (t, lista) {
+      if (!lista.length) return;
+      var sh = aba(t);
+      sh.getRange(sh.getLastRow() + 1, 1, lista.length, CORE.TABELAS[t].length).setValues(lista.map(function (o) { return linhaDe(t, o); }));
       delete cache[t];
     },
     update: function (t, id, patch) {

@@ -1,6 +1,6 @@
 // ---- Versão de demonstração: dados guardados só neste aparelho ----
 var DEMO_DB = (function () {
-  var CHAVE = 'inv-buffet-demo-v1';
+  var CHAVE = 'inv-buffet-demo-v2';
   var mem = null;
   function carregar() {
     if (mem) return mem;
@@ -17,10 +17,13 @@ var DEMO_DB = (function () {
       ['Bandeja inox redonda 40 cm', 'Bandejas', 30], ['Bandeja espelhada retangular', 'Bandejas', 12],
       ['Bandeja de madeira rústica', 'Bandejas', 16], ['Forno elétrico industrial', 'Equipamentos', 2],
       ['Cooktop 2 bocas', 'Equipamentos', 3], ['Pia portátil', 'Equipamentos', 2], ['Fogareiro 1 boca', 'Equipamentos', 8],
-      ['Gás de fogareiro (lata)', 'Gás', 40]
+      ['Gás de fogareiro (lata)', 'Gás', 40],
+      ['Colheres grandes', 'Talheres', 12, 'Caixa de talher'], ['Espátulas', 'Talheres', 6, 'Caixa de talher'], ['Pegadores', 'Talheres', 10, 'Caixa de talher'],
+      ['Saco de confeiteiro', 'Utensílios', 20, 'Caixa de talher'], ['Açúcar sachê (caixa)', 'Secos', 5, 'Caixa de secos'], ['Adoçante líquido', 'Secos', 4, 'Caixa de secos'],
+      ['Pó de café 500 g', 'Secos', 6, 'Caixa de secos']
     ];
     m.itens = ex.map(function (e, i) {
-      return { id: 'ex' + i, nome: e[0], categoria: e[1], descricao: 'Exemplo — apague ou edite', foto: '',
+      return { id: 'ex' + i, nome: e[0], categoria: e[1], descricao: 'Exemplo — apague ou edite', foto: '', grupo: e[3] || 'Material',
         qtd_total: String(e[2]), ativo: 'sim', criado_em: new Date().toISOString() };
     });
   }

@@ -116,6 +116,34 @@ textarea { min-height: 80px }
 .prest { display: grid; grid-template-columns: 1fr 1fr 44px; gap: 8px; margin-bottom: 8px }
 .prest button { border: 1px solid var(--line); background: var(--bg); border-radius: 12px; cursor: pointer; font-size: 18px }
 .loading { text-align: center; color: var(--muted); padding: 40px 0 }
+h3.grp { display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-size: 18px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--wine) }
+h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted) }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px }
+.tools .btn { min-height: 40px; padding: 0 14px; font-size: 14px }
+.zonas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start }
+.zona { background: var(--surface); border: 2px dashed var(--line); border-radius: var(--r); padding: 10px; min-height: 90px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.zona.alvo { border-color: var(--wine); background: var(--wine-soft) }
+.zona .zh { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; padding: 2px 2px 6px }
+.zona .zh b { font-family: var(--display); font-size: 17px }
+.arr { display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; user-select: none; -webkit-user-select: none; min-width: 0 }
+.arr.sel { border-color: var(--wine); background: var(--wine-soft) }
+.arr .ph { width: 36px; height: 36px; border-radius: 8px; font-size: 13px; flex: none }
+.arr .nm { flex: 1; min-width: 0; font-size: 14px; line-height: 1.25; overflow-wrap: anywhere }
+.arr .alca { touch-action: none; cursor: grab; font-size: 20px; color: var(--muted); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex: none; border-radius: 8px }
+.arr .alca:hover { background: var(--line) }
+.fantasma { position: fixed; z-index: 40; pointer-events: none; opacity: .92; box-shadow: 0 8px 24px rgb(0 0 0 / .25); width: 240px }
+#print { display: none }
+@media print {
+  body > *:not(#print) { display: none !important }
+  #print { display: block !important; color: #000; background: #fff; font: 10.5pt/1.3 var(--body) }
+  #print h1 { font-size: 15pt; margin: 0 0 2px } #print .info { font-size: 9.5pt; margin-bottom: 8px }
+  #print h2 { font-size: 11.5pt; margin: 10px 0 4px; border-bottom: 1px solid #000; padding-bottom: 2px; break-after: avoid }
+  #print ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18px }
+  #print li { break-inside: avoid; padding: 1.5px 0; display: flex; gap: 6px }
+  #print li span.q { min-width: 28px; text-align: right; font-weight: 700 } #print li span.v { margin-left: auto; color: #444 }
+  #print .ass { margin-top: 14px; font-size: 9.5pt }
+  @page { margin: 12mm }
+}
 @media (prefers-reduced-motion: no-preference) { .toast { animation: up .2s ease-out } @keyframes up { from { opacity: 0; transform: translate(-50%, 8px) } } }
 @media (max-width: 380px) { .tiles { grid-template-columns: 1fr } .grid { grid-template-columns: 1fr 1fr } .prest { grid-template-columns: 1fr 44px } .prest input:nth-child(2) { grid-column: 1 } }
 </style>
@@ -128,7 +156,7 @@ textarea { min-height: 80px }
 <script>
 /*__BACKEND__*/
 (function () {
-  var S = { who: null, token: null, data: null, view: 'inicio', p: {}, stack: [], erro: '', cat: 'Todos', q: '' };
+  var S = { who: null, token: null, data: null, view: 'inicio', p: {}, stack: [], erro: '', grp: 'Todos', q: '' };
   var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -239,7 +267,7 @@ textarea { min-height: 80px }
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 4 • GitHub</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 5 • grupos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
@@ -286,41 +314,61 @@ textarea { min-height: 80px }
     };
   };
 
+  function grupos() { return S.data.grupos || ['Material']; }
+  function grupoDoItem(id) { var i = item(id); return i ? i.grupo : 'Material'; }
+  // Junta uma lista em grupos, na ordem dos grupos: [[grupo, itens], ...]
+  function agrupar(lista, fg) {
+    var ordem = grupos().slice(), mapa = {};
+    lista.forEach(function (x) { var g = fg(x); if (ordem.indexOf(g) < 0) ordem.push(g); (mapa[g] = mapa[g] || []).push(x); });
+    return ordem.filter(function (g) { return mapa[g]; }).map(function (g) { return [g, mapa[g]]; });
+  }
   function filtrar(lista) {
     var q = S.q.toLowerCase();
+    if (S.grp !== 'Todos' && grupos().indexOf(S.grp) < 0) S.grp = 'Todos';
     return lista.filter(function (i) {
-      return (S.cat === 'Todos' || i.categoria === S.cat) && (!q || (i.nome + ' ' + i.categoria + ' ' + (i.descricao || '')).toLowerCase().indexOf(q) >= 0);
+      return (S.grp === 'Todos' || i.grupo === S.grp) && (!q || (i.nome + ' ' + i.categoria + ' ' + i.grupo + ' ' + (i.descricao || '')).toLowerCase().indexOf(q) >= 0);
     });
   }
+  function chipsGrupos(lista, atual, attr) {
+    return '<div class="chips">' + ['Todos'].concat(lista).map(function (g) {
+      return '<button class="chip' + (g === atual ? ' on' : '') + '" ' + attr + '="' + esc(g) + '">' + esc(g) + '</button>';
+    }).join('') + '</div>';
+  }
   function busca() {
-    var cats = ['Todos'].concat(S.data.categorias.filter(function (c) { return S.data.itens.some(function (i) { return i.categoria === c; }); }));
-    S.data.itens.forEach(function (i) { if (cats.indexOf(i.categoria) < 0) cats.push(i.categoria); });
     return '<div class="search"><input type="text" id="q" placeholder="Buscar item…" value="' + esc(S.q) + '" aria-label="Buscar item">' +
-      '<div class="chips">' + cats.map(function (c) { return '<button class="chip' + (c === S.cat ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>';
+      chipsGrupos(grupos(), S.grp, 'data-grp') + '</div>';
   }
   function ligarBusca(redesenhar) {
     $('q').oninput = function () { S.q = this.value; redesenhar(); };
-    document.querySelectorAll('[data-cat]').forEach(function (b) { b.onclick = function () { S.cat = b.dataset.cat; render(); }; });
+    document.querySelectorAll('[data-grp]').forEach(function (b) { b.onclick = function () { S.grp = b.dataset.grp; render(); }; });
   }
+  function cabGrupo(g, n, extra) { return '<h3 class="grp">' + esc(g) + (n != null ? ' <small>' + n + '</small>' : '') + (extra || '') + '</h3>'; }
 
   V.inventario = function () {
     var s = sess();
     header('Inventário', true);
     bar(s && s.inventario ? '<button class="btn primary" id="novo">+ Cadastrar item</button>' : '');
-    $('app').innerHTML = busca() + '<div id="lst"></div>' +
+    $('app').innerHTML = busca() +
+      (s && s.inventario ? '<div class="tools"><button class="btn" id="org">Organizar grupos</button><button class="btn" id="vrs">Cadastrar vários</button></div>' : '') +
+      '<div id="lst"></div>' +
       (s && !s.inventario ? '<p class="hint" style="margin-top:16px">Sua senha não permite incluir ou excluir itens. A coordenação libera isso em Equipe e senhas.</p>' : '') +
       (!s ? '<p class="hint" style="margin-top:16px">Para cadastrar itens, entre na Área da equipe.</p>' : '');
     function desenhar() {
-      var l = filtrar(S.data.itens).sort(function (a, b) { return a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome); });
-      $('lst').innerHTML = l.length ? '<div class="grid">' + l.map(function (i) {
+      var l = filtrar(S.data.itens).sort(function (a, b) { return a.nome.localeCompare(b.nome); });
+      function card(i) {
         var baixo = i.disponivel < i.qtd_total;
         return '<button class="card" data-it="' + i.id + '"><div class="ph">' + foto(i) + '</div><div class="tx"><span class="nm">' + esc(i.nome) + '</span>' +
           '<span class="hint">' + esc(i.categoria) + '</span><span class="qty"><b>' + i.disponivel + '</b> ' + (baixo ? 'livres de ' + i.qtd_total : 'no estoque') + '</span></div></button>';
-      }).join('') + '</div>' : '<div class="empty">' + (S.data.itens.length ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado ainda.<br>Toque em “Cadastrar item” para incluir o primeiro.') + '</div>';
+      }
+      $('lst').innerHTML = l.length ? agrupar(l, function (i) { return i.grupo; }).map(function (g) {
+        return (S.grp === 'Todos' ? cabGrupo(g[0], g[1].length) : '') + '<div class="grid">' + g[1].map(card).join('') + '</div>';
+      }).join('') : '<div class="empty">' + (S.data.itens.length ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado ainda.<br>Toque em “Cadastrar item” para incluir o primeiro.') + '</div>';
       document.querySelectorAll('[data-it]').forEach(function (b) { b.onclick = function () { detalheItem(b.dataset.it); }; });
     }
     ligarBusca(desenhar); desenhar();
     if ($('novo')) $('novo').onclick = function () { ir('item', {}); };
+    if ($('org')) $('org').onclick = function () { ir('grupos'); };
+    if ($('vrs')) $('vrs').onclick = function () { ir('varios'); };
   };
 
   function fecharModal() { $('modal').innerHTML = ''; }
@@ -370,7 +418,7 @@ textarea { min-height: 80px }
   }
 
   V.item = function () {
-    var i = S.p.id ? item(S.p.id) : { nome: '', categoria: S.cat !== 'Todos' ? S.cat : '', descricao: '', qtd_total: '' };
+    var i = S.p.id ? item(S.p.id) : { nome: '', categoria: '', grupo: S.grp !== 'Todos' ? S.grp : 'Material', descricao: '', qtd_total: '' };
     var nova = null;
     header(S.p.id ? 'Editar item' : 'Cadastrar item', true);
     var cats = S.data.categorias.slice();
@@ -380,7 +428,8 @@ textarea { min-height: 80px }
       '<label class="btn block" style="margin-top:10px" for="fo">' + (i.foto ? 'Trocar foto' : 'Tirar ou escolher foto') + '</label>' +
       '<input type="file" id="fo" accept="image/*" hidden>' +
       '<label class="f" for="nm">Nome do item</label><input type="text" id="nm" value="' + esc(i.nome) + '" placeholder="Ex.: Bandeja espelhada retangular" required>' +
-      '<label class="f" for="ct">Categoria</label><input type="text" id="ct" list="cats" value="' + esc(i.categoria) + '" placeholder="Ex.: Bandejas">' +
+      '<label class="f" for="gr">Grupo na lista do evento</label><select id="gr">' + grupos().map(function (g) { return '<option' + (g === i.grupo ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>' +
+      '<label class="f" for="ct">Tipo (opcional)</label><input type="text" id="ct" list="cats" value="' + esc(i.categoria === 'Outros' ? '' : i.categoria) + '" placeholder="Ex.: Bandejas, Taças, Copos">' +
       '<datalist id="cats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
       '<label class="f" for="qt">Quantidade total</label><input type="number" id="qt" min="0" inputmode="numeric" value="' + esc(i.qtd_total) + '" required>' +
       '<label class="f" for="ds">Observação (opcional)</label><textarea id="ds" placeholder="Ex.: estilo, tamanho, cor">' + esc(i.descricao) + '</textarea>' +
@@ -393,9 +442,96 @@ textarea { min-height: 80px }
     };
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, categoria: $('ct').value, qtd_total: $('qt').value, descricao: $('ds').value, fotoNova: nova } }),
+      fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, grupo: $('gr').value, categoria: $('ct').value, qtd_total: $('qt').value, descricao: $('ds').value, fotoNova: nova } }),
         function () { toast('Item salvo'); voltar(); });
     };
+  };
+
+  V.varios = function () {
+    header('Cadastrar vários itens', true);
+    $('app').innerHTML = '<p class="sub">Cole os nomes, um por linha. Pode copiar uma coluna direto da planilha. Para já informar a quantidade, use “nome; quantidade”.</p>' +
+      '<label class="f" for="tx">Itens</label><textarea id="tx" style="min-height:220px" placeholder="Taça de água; 120&#10;Taça de vinho tinto; 96&#10;Bandeja de espelho"></textarea>' +
+      '<label class="f" for="gr">Grupo</label><select id="gr">' + grupos().map(function (g) { return '<option' + (g === S.grp ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>' +
+      '<label class="f" for="ct">Tipo (opcional)</label><input type="text" id="ct" placeholder="Ex.: Bandejas">' +
+      '<p class="hint">Itens que já existem com o mesmo nome são ignorados. As fotos você coloca depois, abrindo cada item.</p><div id="erro" class="err" hidden></div>';
+    bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Cadastrar</button>');
+    $('cn').onclick = voltar;
+    $('ok').onclick = function () {
+      fazer(this, api('salvarVarios', { texto: $('tx').value, grupo: $('gr').value, categoria: $('ct').value }), function (r) {
+        toast(r.incluidos + ' itens cadastrados' + (r.repetidos ? ' (' + r.repetidos + ' já existiam)' : '')); voltar();
+      });
+    };
+  };
+
+  V.grupos = function () {
+    header('Organizar grupos', true);
+    var sel = S.p.sel || (S.p.sel = {});
+    var q = S.p.q || '';
+    $('app').innerHTML = '<p class="sub">Arraste cada item pela alça ⠿ até o grupo certo. Ou toque em vários itens para marcar e depois em “Mover para cá”.</p>' +
+      '<div class="row" style="margin-bottom:10px"><input type="text" id="gq" placeholder="Buscar item…" value="' + esc(q) + '" aria-label="Buscar item">' +
+      '<button class="btn" id="ng" style="flex:0 0 auto">+ Novo grupo</button></div><div id="ngf"></div><div class="zonas" id="zn"></div><div id="erro" class="err" hidden></div>';
+    bar('');
+    function nsel() { return Object.keys(sel).filter(function (k) { return sel[k]; }); }
+    function desenhar() {
+      var qq = q.toLowerCase(), n = nsel().length;
+      $('zn').innerHTML = grupos().map(function (g) {
+        var its = S.data.itens.filter(function (i) { return i.grupo === g && (!qq || i.nome.toLowerCase().indexOf(qq) >= 0); })
+          .sort(function (a, b) { return a.nome.localeCompare(b.nome); });
+        return '<div class="zona" data-zona="' + esc(g) + '"><div class="zh"><b>' + esc(g) + ' <small class="hint">' + its.length + '</small></b>' +
+          (n ? '<button class="btn" style="min-height:36px;font-size:14px" data-mv="' + esc(g) + '">Mover ' + n + ' para cá</button>' : '') + '</div>' +
+          (its.length ? its.map(function (i) {
+            return '<div class="arr' + (sel[i.id] ? ' sel' : '') + '" data-it="' + i.id + '"><span class="alca" data-alca="' + i.id + '" aria-label="Arrastar">⠿</span><div class="ph">' + foto(i) + '</div><span class="nm">' + esc(i.nome) + '</span></div>';
+          }).join('') : '<div class="hint" style="padding:10px;text-align:center">Solte itens aqui</div>') + '</div>';
+      }).join('');
+      document.querySelectorAll('.arr').forEach(function (el) {
+        el.onclick = function (ev) { if (ev.target.closest('.alca')) return; sel[el.dataset.it] = !sel[el.dataset.it]; desenhar(); };
+      });
+      document.querySelectorAll('[data-mv]').forEach(function (b) { b.onclick = function () { mover(nsel(), b.dataset.mv); }; });
+      document.querySelectorAll('[data-alca]').forEach(function (h) { h.onpointerdown = arrastar; });
+    }
+    function mover(ids, g) {
+      ids = ids.filter(function (id) { var i = item(id); return i && i.grupo !== g; });
+      Object.keys(sel).forEach(function (k) { sel[k] = false; });
+      if (!ids.length) { desenhar(); return; }
+      ids.forEach(function (id) { item(id).grupo = g; });
+      desenhar();
+      toast(ids.length === 1 ? 'Movido para ' + g : ids.length + ' itens movidos para ' + g);
+      api('moverItens', { ids: ids, grupo: g }).catch(function (e) { S.erro = e.message; mostrarErro(); recarregar().then(desenhar); });
+    }
+    function arrastar(ev) {
+      ev.preventDefault();
+      var id = ev.currentTarget.dataset.alca, orig = ev.currentTarget.closest('.arr');
+      var ids = sel[id] ? nsel() : [id];
+      var f = orig.cloneNode(true); f.classList.add('fantasma');
+      if (ids.length > 1) f.querySelector('.nm').textContent = ids.length + ' itens';
+      document.body.appendChild(f);
+      var alvo = null, rolar = 0, timer = setInterval(function () { if (rolar) window.scrollBy(0, rolar); }, 16);
+      function pos(x, y) {
+        f.style.left = (x - 20) + 'px'; f.style.top = (y - 20) + 'px';
+        var el = document.elementFromPoint(x, y), z = el && el.closest('[data-zona]');
+        if (alvo && alvo !== z) alvo.classList.remove('alvo');
+        alvo = z; if (z) z.classList.add('alvo');
+        var h = window.innerHeight; rolar = y < 70 ? -12 : y > h - 70 ? 12 : 0;
+      }
+      pos(ev.clientX, ev.clientY);
+      function mv(e) { pos(e.clientX, e.clientY); }
+      function up() {
+        clearInterval(timer); document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+        f.remove();
+        if (alvo) { alvo.classList.remove('alvo'); mover(ids, alvo.dataset.zona); }
+      }
+      document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+    }
+    $('gq').oninput = function () { q = S.p.q = this.value; desenhar(); };
+    $('ng').onclick = function () {
+      $('ngf').innerHTML = '<div class="row" style="margin-bottom:12px"><input type="text" id="ngn" placeholder="Ex.: Caixa de limpeza" aria-label="Nome do novo grupo"><button class="btn primary" id="ngok" style="flex:0 0 auto">Criar</button></div>';
+      $('ngn').focus();
+      $('ngok').onclick = function () {
+        var nome = $('ngn').value.trim();
+        fazer(this, api('criarGrupo', { grupo: nome }), function () { toast('Grupo criado'); render(); });
+      };
+    };
+    desenhar();
   };
 
   V.eventos = function () {
@@ -509,15 +645,23 @@ textarea { min-height: 80px }
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
       (e.status === 'concluido' ? '<dt>Retorno por</dt><dd>' + esc(e.retorno_por) + '<br>' + quando(e.concluido_em) + '</dd>' : '') + '</dl></div>';
     h += '<h2>Material</h2>';
-    if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
-    else h += '<div class="list">' + e.linhas.map(function (l) {
+    var gEv = agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); });
+    var aba = S.p.aba || 'Todos';
+    if (e.linhas.length) h += '<div class="tools"><button class="btn" id="imp">Imprimir</button><button class="btn" id="cop">Copiar para WhatsApp</button></div>' +
+      (gEv.length > 1 ? chipsGrupos(gEv.map(function (g) { return g[0]; }), aba, 'data-aba') : '');
+    function linhaEv(l) {
       var it = item(l.item_id) || { nome: l.nome };
       var ret = l.qtd_retorno != null, falt = ret && l.qtd_retorno < l.qtd_saida;
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(it.nome) + '</div>' +
         '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc(l.justificativa) + '</div>' : '') + '</div>' +
         (falt ? '<span class="pill falta">−' + (l.qtd_saida - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
-    }).join('') + '</div>';
+    }
+    if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
+    else h += gEv.filter(function (g) { return aba === 'Todos' || g[0] === aba; }).map(function (g) {
+      var pc = g[1].reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+      return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + '<div class="list">' + g[1].map(linhaEv).join('') + '</div>';
+    }).join('');
     if (e.status === 'em_evento' && !podeRet)
       h += '<p class="hint" style="margin-top:16px">Só os prestadores deste evento podem registrar o retorno. Seu telefone (' + esc(S.who.telefone) + ') não está na lista. Peça ao estoquista para incluir você.</p>';
     if (s && e.status !== 'concluido') h += '<div class="row" style="margin-top:22px"><button class="btn" id="ed">Editar dados e prestadores</button>' +
@@ -528,6 +672,29 @@ textarea { min-height: 80px }
     else if (podeRet) bar('<button class="btn primary" id="rt">Registrar retorno</button>');
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
+    document.querySelectorAll('[data-aba]').forEach(function (b) { b.onclick = function () { S.p.aba = b.dataset.aba; render(); }; });
+    function nomeL(l) { return (item(l.item_id) || { nome: l.nome }).nome; }
+    if ($('imp')) $('imp').onclick = function () {
+      var info = dataBR(e.data) + (e.hora_inicio ? ' · ' + e.hora_inicio + (e.hora_fim ? '–' + e.hora_fim : '') : '') + (e.local ? ' · ' + e.local : '');
+      var pr = e.prestadores.map(function (p) { return p.nome; }).join(', ');
+      var el = $('print') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'print' }));
+      el.innerHTML = '<h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(STATUS[e.status]) + '</div>' +
+        gEv.map(function (g) {
+          return '<h2>' + esc(g[0]) + '</h2><ul>' + g[1].map(function (l) {
+            return '<li><span>☐</span><span class="q">' + l.qtd_saida + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
+          }).join('') + '</ul>';
+        }).join('') + '<div class="ass">Separado por: ______________________ &nbsp;&nbsp; Conferido na volta por: ______________________</div>';
+      try { window.print(); } catch (x) { toast('Use o menu do navegador para imprimir'); }
+    };
+    if ($('cop')) $('cop').onclick = function () {
+      var t = '*' + e.nome + '*\n' + dataBR(e.data) + (e.hora_inicio ? ' ' + e.hora_inicio : '') + (e.local ? ' · ' + e.local : '') + '\n' +
+        gEv.map(function (g) { return '\n*' + g[0] + '*\n' + g[1].map(function (l) { return l.qtd_saida + ' × ' + nomeL(l); }).join('\n'); }).join('\n');
+      function mostrar() {
+        $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><h2>Lista em texto</h2><p class="hint">Selecione tudo e copie.</p><textarea id="ctx" style="min-height:260px">' + esc(t) + '</textarea><div style="height:10px"></div><button class="btn block" id="m-fc">Fechar</button></div></div>';
+        $('m-fc').onclick = fecharModal; $('ctx').select();
+      }
+      try { navigator.clipboard.writeText(t).then(function () { toast('Lista copiada. Cole no WhatsApp.'); }, mostrar); } catch (x) { mostrar(); }
+    };
     if ($('cs')) $('cs').onclick = function () { fazer(this, api('confirmarSaida', { id: e.id }), function () { toast('Saída confirmada'); render(); }); };
     if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
     if ($('ed')) $('ed').onclick = function () { ir('eventoForm', { id: e.id }); };
@@ -551,10 +718,14 @@ textarea { min-height: 80px }
     }
     function desenhar() {
       var l = filtrar(S.data.itens).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || a.nome.localeCompare(b.nome); });
-      $('lst').innerHTML = l.length ? l.map(function (i) {
+      function linhaM(i) {
         return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(i.nome) + '</div><div class="qty">' + livre(i) + ' disponíveis</div></div>' +
           '<div class="stepper"><button type="button" data-m="' + i.id + '" aria-label="Menos">−</button><input type="number" min="0" inputmode="numeric" data-q="' + i.id + '" value="' + (qtd[i.id] || '') + '" placeholder="0" aria-label="Quantidade de ' + esc(i.nome) + '">' +
           '<button type="button" data-p="' + i.id + '" aria-label="Mais">+</button></div></div>';
+      }
+      $('lst').innerHTML = l.length ? agrupar(l, function (i) { return i.grupo; }).map(function (g) {
+        var sep = g[1].filter(function (i) { return qtd[i.id] > 0; }).length;
+        return (S.grp === 'Todos' ? cabGrupo(g[0], sep ? sep + ' separados' : null) : '') + g[1].map(linhaM).join('');
       }).join('') : '<div class="empty">Nenhum item encontrado.</div>';
       function set(id, v) { var max = livre(item(id)); v = Math.max(0, Math.min(max, v || 0)); qtd[id] = v; document.querySelector('[data-q="' + id + '"]').value = v || ''; total(); if (v === max && max > 0) toast('Máximo disponível: ' + max); }
       document.querySelectorAll('[data-m]').forEach(function (b) { b.onclick = function () { set(b.dataset.m, (qtd[b.dataset.m] || 0) - 1); }; });
@@ -575,12 +746,12 @@ textarea { min-height: 80px }
     var r = S.p.r || (S.p.r = {});
     $('app').innerHTML = '<p class="sub">Conte o que voltou do evento. Se voltou menos do que saiu, explique o motivo.</p>' +
       '<button class="btn block" id="tudo">Voltou tudo certo (preencher tudo)</button><div style="height:12px"></div>' +
-      '<div class="list">' + e.linhas.map(function (l) {
+      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (l) {
         var it = item(l.item_id) || { nome: l.nome };
         return '<div class="ret" id="r-' + l.item_id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(it.nome) + '</div><div class="qty">Saiu <b>' + l.qtd_saida + '</b></div></div>' +
           '<div><label class="hint" for="v-' + l.item_id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + l.item_id + '" data-v="' + l.item_id + '" style="width:84px;text-align:center"></div></div>' +
           '<div data-j="' + l.item_id + '" hidden><label class="f" style="margin-top:0" for="j-' + l.item_id + '">Por que voltaram menos?</label><textarea id="j-' + l.item_id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
-      }).join('') + '</div><div id="erro" class="err" hidden></div>';
+      }).join('') + '</div>'; }).join('') + '<div id="erro" class="err" hidden></div>';
     function upd(id) {
       var l = e.linhas.filter(function (x) { return x.item_id === id; })[0];
       var v = $('v-' + id).value, falta = v !== '' && +v < l.qtd_saida;

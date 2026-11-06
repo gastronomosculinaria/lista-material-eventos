@@ -77,6 +77,12 @@ function novoDb_() {
       sh.appendRow(linhaDe(t, o));
       delete cache[t];
     },
+    insertMany: function (t, lista) {
+      if (!lista.length) return;
+      var sh = aba(t);
+      sh.getRange(sh.getLastRow() + 1, 1, lista.length, CORE.TABELAS[t].length).setValues(lista.map(function (o) { return linhaDe(t, o); }));
+      delete cache[t];
+    },
     update: function (t, id, patch) {
       var o = ler(t).filter(function (x) { return x.id === id; })[0];
       if (!o) return;
