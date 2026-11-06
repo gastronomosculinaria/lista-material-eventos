@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><base target="_top"><meta charset="utf-8"></head><body>
+<title>Lista de Material de Eventos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: uma coluna estreita como app de celular; cabeçalho fixo, botões grandes, barra de ação no rodapé. */
+:root {
+  --bg: #f3f4f1; --surface: #ffffff; --ink: #1d2422; --muted: #5f6a66; --line: #dde1dc;
+  --wine: #7a1f35; --wine-ink: #ffffff; --wine-soft: #f5e6ea;
+  --ok: #1f7a4d; --ok-soft: #e2f3ea; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #b3261e; --bad-soft: #fbe5e3;
+  --info: #24589c; --info-soft: #e3ecf8;
+  --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
+  --wine: #e07a93; --wine-ink: #1b0b10; --wine-soft: #3a1f27;
+  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
+  --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
+  --wine: #e07a93; --wine-ink: #1b0b10; --wine-soft: #3a1f27;
+  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
+  --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark }
+* { box-sizing: border-box }
+html, body { background: var(--bg); color: var(--ink) }
+body { font-family: var(--body); font-size: 16px; line-height: 1.45; -webkit-text-size-adjust: 100% }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface) }
+button, input, select, textarea { font: inherit; color: inherit }
+.wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 120px }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line) }
+header.top .in { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 10px; min-height: 58px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header.top h1 { font-family: var(--display); font-size: 20px; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.back { border: 0; background: none; font-size: 26px; width: 44px; height: 44px; border-radius: 12px; cursor: pointer; color: var(--ink) }
+.back:hover { background: var(--bg) }
+.who { font-size: 13px; color: var(--muted); text-align: right; line-height: 1.2 }
+.demo { background: var(--warn-soft); color: var(--warn); font-size: 13px; padding: 8px 12px; border-radius: 10px; margin-bottom: 14px }
+h2 { font-family: var(--display); font-size: 22px; margin: 22px 0 10px; text-wrap: balance }
+h3 { font-size: 17px; margin: 18px 0 8px }
+p.sub { color: var(--muted); margin: 4px 0 14px }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; text-align: left; cursor: pointer; min-height: 112px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px }
+.tile:hover { border-color: var(--wine) }
+.tile b { font-size: 18px; font-family: var(--display) }
+.tile span { color: var(--muted); font-size: 14px }
+.tile .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--wine) }
+.tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none }
+.btn.primary { background: var(--wine); color: var(--wine-ink); border-color: var(--wine) }
+.btn.danger { color: var(--bad); border-color: var(--bad) }
+.btn.block { width: 100% }
+.btn:disabled { opacity: .5; cursor: default }
+.btn:focus-visible, .tile:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .chip:focus-visible { outline: 3px solid var(--wine); outline-offset: 2px }
+.row { display: flex; gap: 10px; flex-wrap: wrap }
+.row > * { flex: 1 1 140px }
+label.f { display: block; font-weight: 600; margin: 14px 0 6px }
+input[type=text], input[type=tel], input[type=number], input[type=password], input[type=date], input[type=time], select, textarea {
+  width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface) }
+textarea { min-height: 80px }
+.hint { font-size: 14px; color: var(--muted) }
+.err { background: var(--bad-soft); color: var(--bad); padding: 10px 12px; border-radius: 10px; margin: 12px 0 }
+.search { position: sticky; top: calc(58px + env(safe-area-inset-top, 0px)); z-index: 4; background: var(--bg); padding-block: 8px; margin-top: -8px }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: none }
+.chip { flex: none; border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; white-space: nowrap }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 8px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; cursor: pointer; text-align: left; padding: 0; display: flex; flex-direction: column }
+.card .ph { aspect-ratio: 4 / 3; max-width: 100% }
+.card .tx { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.card .nm { font-weight: 600; line-height: 1.25 }
+.ph { background: var(--wine-soft); color: var(--wine); display: flex; align-items: center; justify-content: center; font-family: var(--display); font-weight: 700; font-size: 26px; overflow: hidden; width: 100% }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block }
+.qty { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums }
+.qty b { color: var(--ink) }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap }
+.pill.montando { background: var(--warn-soft); color: var(--warn) }
+.pill.em_evento { background: var(--info-soft); color: var(--info) }
+.pill.concluido { background: var(--ok-soft); color: var(--ok) }
+.pill.falta { background: var(--bad-soft); color: var(--bad) }
+.list { display: flex; flex-direction: column; gap: 10px }
+.li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; gap: 12px; align-items: center; cursor: pointer; text-align: left; width: 100% }
+.li .ph { width: 56px; height: 56px; flex: none; border-radius: 10px; font-size: 18px }
+.li .mid { flex: 1; min-width: 0 }
+.li .mid .nm { font-weight: 600 }
+.li.static { cursor: default }
+.li.pick { flex-wrap: wrap }
+.li.pick .mid { flex: 1 1 150px }
+.li.pick .stepper { margin-left: auto }
+.stepper { display: flex; align-items: center; gap: 6px; flex: none }
+.stepper button { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); font-size: 22px; cursor: pointer }
+.stepper input { width: 64px; text-align: center; min-height: 44px; padding: 6px; font-variant-numeric: tabular-nums }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line);
+  padding-top: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.bar .in { max-width: 640px; margin: 0 auto; display: flex; gap: 10px; align-items: center }
+.bar .in .btn { flex: 1 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 15px }
+.kv dt { color: var(--muted) }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+.ret { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 10px }
+.ret.short { border-color: var(--bad) }
+.ret .top { display: flex; gap: 12px; align-items: center }
+.ret .top .ph { width: 56px; height: 56px; border-radius: 10px; font-size: 18px; flex: none }
+.logi { border-bottom: 1px solid var(--line); padding: 10px 0; font-size: 14px }
+.logi .t { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
+.empty { text-align: center; color: var(--muted); padding: 32px 12px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r) }
+.modal { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / .45); display: flex; align-items: flex-end; justify-content: center }
+.modal .sheet { background: var(--surface); width: 100%; max-width: 640px; border-radius: 18px 18px 0 0; max-height: 92%; overflow-y: auto;
+  padding: 18px max(16px, env(safe-area-inset-right, 0px)) max(18px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)) }
+.modal .sheet .bigph { aspect-ratio: 4 / 3; border-radius: 12px; font-size: 48px; max-width: 100% }
+.toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; z-index: 30; font-weight: 600; max-width: calc(100% - 32px) }
+.check { display: flex; gap: 10px; align-items: center; min-height: 48px }
+.check input { width: 22px; height: 22px }
+.prest { display: grid; grid-template-columns: 1fr 1fr 44px; gap: 8px; margin-bottom: 8px }
+.prest button { border: 1px solid var(--line); background: var(--bg); border-radius: 12px; cursor: pointer; font-size: 18px }
+.loading { text-align: center; color: var(--muted); padding: 40px 0 }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: up .2s ease-out } @keyframes up { from { opacity: 0; transform: translate(-50%, 8px) } } }
+@media (max-width: 380px) { .tiles { grid-template-columns: 1fr } .grid { grid-template-columns: 1fr 1fr } .prest { grid-template-columns: 1fr 44px } .prest input:nth-child(2) { grid-column: 1 } }
+</style>
+
+<header class="top"><div class="in" id="hdr"></div></header>
+<main class="wrap" id="app"><div class="loading">Carregando…</div></main>
+<div id="bar"></div>
+<div id="modal"></div>
+
+<script>
+
+(function () {
+  var S = { who: null, token: null, data: null, view: 'inicio', p: {}, stack: [], erro: '', cat: 'Todos', q: '' };
+  var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function ls(k, v) {
+    try { if (v === undefined) return JSON.parse(localStorage.getItem('inv-buffet-' + k) || 'null'); localStorage.setItem('inv-buffet-' + k, JSON.stringify(v)); } catch (e) { return null; }
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function iniciais(n) { return esc(String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase()); }
+  function foto(it) { return it && it.foto ? '<img src="' + esc(it.foto) + '" alt="" loading="lazy">' : iniciais(it && it.nome); }
+  function dataBR(d) { if (!d) return 'sem data'; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; }
+  function quando(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  var STATUS = { montando: 'Separando material', em_evento: 'No evento', concluido: 'Retornado' };
+
+  function api(acao, payload) {
+    var p = Object.assign({ token: S.token, who: S.who }, payload || {});
+    if (IS_GAS) return new Promise(function (res, rej) {
+      google.script.run.withSuccessHandler(function (r) { r && r.ok ? res(r.data) : rej(new Error(r ? r.erro : 'Sem resposta do servidor.')); })
+        .withFailureHandler(function (e) { rej(new Error(e && e.message ? e.message : 'Falha de conexão. Tente de novo.')); }).api(acao, p);
+    });
+    return new Promise(function (res, rej) {
+      setTimeout(function () { try { res(JSON.parse(JSON.stringify(CORE.handle(DEMO_DB.db, acao, p)))); } catch (e) { rej(e); } }, 120);
+    });
+  }
+  function toast(msg) {
+    var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+  function recarregar() {
+    return api('carregar').then(function (d) {
+      S.data = d;
+      if (S.token && !d.sessao) { S.token = null; ls('token', null); }
+    });
+  }
+  function ir(view, p, semHistorico) {
+    if (!semHistorico) S.stack.push({ view: S.view, p: S.p });
+    S.view = view; S.p = p || {}; S.erro = '';
+    window.scrollTo(0, 0); render();
+  }
+  function voltar() { var a = S.stack.pop() || { view: 'inicio', p: {} }; S.view = a.view; S.p = a.p; S.erro = ''; render(); }
+  function inicio() { S.stack = []; S.view = 'inicio'; S.p = {}; render(); }
+  function fazer(btn, promessa, ok) {
+    if (btn) btn.disabled = true;
+    S.erro = '';
+    return promessa.then(function (r) { return recarregar().then(function () { if (ok) ok(r); }); })
+      .catch(function (e) { S.erro = e.message; if (btn) btn.disabled = false; mostrarErro(); });
+  }
+  function mostrarErro() {
+    var el = $('erro'); if (el) { el.hidden = !S.erro; el.textContent = S.erro; el.scrollIntoView({ block: 'center' }); }
+    else if (S.erro) toast(S.erro);
+  }
+  function sess() { return S.data && S.data.sessao; }
+  function item(id) { return (S.data.itens || []).filter(function (i) { return i.id === id; })[0]; }
+  function evento(id) { return (S.data.eventos || []).filter(function (e) { return e.id === id; })[0]; }
+  function digitos(s) { return String(s || '').replace(/\D/g, ''); }
+  function souPrestador(ev) {
+    var t = digitos(S.who && S.who.telefone);
+    return t.length >= 8 && ev.prestadores.some(function (p) { var x = digitos(p.telefone); return x.length >= 8 && x.slice(-8) === t.slice(-8); });
+  }
+
+  function header(titulo, podeVoltar) {
+    var s = sess();
+    $('hdr').innerHTML = (podeVoltar ? '<button class="back" id="bk" aria-label="Voltar">←</button>' : '<span style="width:4px"></span>') +
+      '<h1>' + esc(titulo) + '</h1>' +
+      (S.who ? '<div class="who">' + esc(S.who.nome) + (s ? '<br>' + (s.papel === 'coordenador' ? 'Coordenação' : 'Estoquista') : '') + '</div>' : '');
+    if (podeVoltar) $('bk').onclick = voltar;
+  }
+  function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
+  function demoAviso() { return IS_GAS ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
+
+  // ---------- telas ----------
+  var V = {};
+
+  V.ident = function () {
+    header('Lista de Material de Eventos');
+    bar('');
+    $('app').innerHTML = demoAviso() +
+      '<h2>Quem está usando?</h2><p class="sub">Seu nome e telefone ficam registrados em tudo que você fizer no app.</p>' +
+      '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
+      '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
+      '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Entrar</button></form>';
+    $('f').onsubmit = function (e) {
+      e.preventDefault();
+      var who = { nome: $('nm').value.trim(), telefone: $('tel').value.trim() };
+      S.who = who;
+      fazer($('ok'), api('entrar'), function () { ls('who', who); inicio(); }).then(function () { if (S.erro) S.who = null; });
+    };
+  };
+
+  V.inicio = function () {
+    var s = sess(), d = S.data;
+    header('Lista de Material de Eventos');
+    bar('');
+    var ativos = d.eventos.filter(function (e) { return e.status !== 'concluido'; });
+    var meus = d.eventos.filter(function (e) { return e.status === 'em_evento' && souPrestador(e); });
+    var h = demoAviso() + '<h2>Olá, ' + esc(S.who.nome.split(' ')[0]) + '</h2>';
+    if (meus.length) h += '<div class="list" style="margin-bottom:14px">' + meus.map(function (e) {
+      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">Registrar retorno: ' + esc(e.nome) + '</div><div class="hint">Você está na lista deste evento</div></div><span class="pill em_evento">No evento</span></button>';
+    }).join('') + '</div>';
+    h += '<div class="tiles">' +
+      '<button class="tile" id="t-inv"><b>Inventário</b><span class="big">' + d.itens.length + '</span><span>itens cadastrados</span></button>' +
+      '<button class="tile" id="t-ev"><b>Eventos</b><span class="big">' + ativos.length + '</span><span>em andamento</span></button>';
+    if (s) {
+      if (s.papel === 'coordenador') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
+        '<button class="tile" id="t-his"><b>Histórico</b><span>Quem acessou e o que mudou</span></button>';
+      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'coordenador' ? 'Coordenação' : 'Estoquista ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
+    } else {
+      h += '<button class="tile wide" id="t-log"><span style="flex:1"><b>Área da equipe</b><br><span>Estoquista ou coordenação: entre com sua senha</span></span><span class="btn">Entrar</span></button>';
+    }
+    h += '</div>';
+    if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 6/11 • agenda v3</p>';
+    if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
+    $('app').innerHTML = h;
+    $('t-inv').onclick = function () { ir('inventario'); };
+    $('t-ev').onclick = function () { ir('eventos'); };
+    if ($('t-pes')) $('t-pes').onclick = function () { ir('pessoas'); };
+    if ($('t-his')) $('t-his').onclick = function () { ir('historico'); };
+    if ($('t-log')) $('t-log').onclick = function () { ir('login'); };
+    if ($('t-out')) $('t-out').onclick = function () { fazer(null, api('sair').then(function () { S.token = null; ls('token', null); }), function () { toast('Você saiu da área da equipe'); inicio(); }); };
+    document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
+    if ($('agh')) api('listarAgenda').then(function (l) {
+      if (!$('agh')) return;
+      l = l.slice(0, 6);
+      $('agh').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
+        return '<button class="li" data-hk="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
+          (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div>' +
+          (c.evento_id ? '<span class="pill concluido">Lista criada</span>' : '<span class="pill montando">Criar lista</span>') + '</button>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum compromisso na agenda nos próximos 90 dias.</div>';
+      document.querySelectorAll('[data-hk]').forEach(function (b) {
+        b.onclick = function () { var c = l[+b.dataset.hk]; if (c.evento_id) ir('evento', { id: c.evento_id }); else ir('eventoForm', { agenda: c }); };
+      });
+    }).catch(function (e) { if ($('agh')) $('agh').innerHTML = erroAgenda(e); });
+    $('troca').onclick = function (e) {
+      e.preventDefault();
+      api('sair').catch(function () {});
+      S.who = null; S.token = null; ls('who', null); ls('token', null); S.view = 'ident'; render();
+    };
+  };
+
+  V.login = function () {
+    header('Área da equipe', true);
+    bar('');
+    $('app').innerHTML = '<h2>Entrar com senha</h2><p class="sub">Estoquistas usam a senha pessoal. Coordenadores usam a senha master.</p>' + demoAviso() +
+      '<form id="f"><label class="f" for="pw">Senha</label><input type="password" id="pw" autocomplete="current-password" required>' +
+      '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Entrar</button></form>';
+    $('pw').focus();
+    $('f').onsubmit = function (e) {
+      e.preventDefault();
+      var btn = $('ok'); btn.disabled = true;
+      api('login', { senha: $('pw').value }).then(function (r) {
+        S.token = r.token; ls('token', r.token);
+        return recarregar();
+      }).then(function () { toast('Bem-vindo à área da equipe'); inicio(); })
+        .catch(function (err) { S.erro = err.message; btn.disabled = false; mostrarErro(); });
+    };
+  };
+
+  function filtrar(lista) {
+    var q = S.q.toLowerCase();
+    return lista.filter(function (i) {
+      return (S.cat === 'Todos' || i.categoria === S.cat) && (!q || (i.nome + ' ' + i.categoria + ' ' + (i.descricao || '')).toLowerCase().indexOf(q) >= 0);
+    });
+  }
+  function busca() {
+    var cats = ['Todos'].concat(S.data.categorias.filter(function (c) { return S.data.itens.some(function (i) { return i.categoria === c; }); }));
+    S.data.itens.forEach(function (i) { if (cats.indexOf(i.categoria) < 0) cats.push(i.categoria); });
+    return '<div class="search"><input type="text" id="q" placeholder="Buscar item…" value="' + esc(S.q) + '" aria-label="Buscar item">' +
+      '<div class="chips">' + cats.map(function (c) { return '<button class="chip' + (c === S.cat ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>';
+  }
+  function ligarBusca(redesenhar) {
+    $('q').oninput = function () { S.q = this.value; redesenhar(); };
+    document.querySelectorAll('[data-cat]').forEach(function (b) { b.onclick = function () { S.cat = b.dataset.cat; render(); }; });
+  }
+
+  V.inventario = function () {
+    var s = sess();
+    header('Inventário', true);
+    bar(s && s.inventario ? '<button class="btn primary" id="novo">+ Cadastrar item</button>' : '');
+    $('app').innerHTML = busca() + '<div id="lst"></div>' +
+      (s && !s.inventario ? '<p class="hint" style="margin-top:16px">Sua senha não permite incluir ou excluir itens. A coordenação libera isso em Equipe e senhas.</p>' : '') +
+      (!s ? '<p class="hint" style="margin-top:16px">Para cadastrar itens, entre na Área da equipe.</p>' : '');
+    function desenhar() {
+      var l = filtrar(S.data.itens).sort(function (a, b) { return a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome); });
+      $('lst').innerHTML = l.length ? '<div class="grid">' + l.map(function (i) {
+        var baixo = i.disponivel < i.qtd_total;
+        return '<button class="card" data-it="' + i.id + '"><div class="ph">' + foto(i) + '</div><div class="tx"><span class="nm">' + esc(i.nome) + '</span>' +
+          '<span class="hint">' + esc(i.categoria) + '</span><span class="qty"><b>' + i.disponivel + '</b> ' + (baixo ? 'livres de ' + i.qtd_total : 'no estoque') + '</span></div></button>';
+      }).join('') + '</div>' : '<div class="empty">' + (S.data.itens.length ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado ainda.<br>Toque em “Cadastrar item” para incluir o primeiro.') + '</div>';
+      document.querySelectorAll('[data-it]').forEach(function (b) { b.onclick = function () { detalheItem(b.dataset.it); }; });
+    }
+    ligarBusca(desenhar); desenhar();
+    if ($('novo')) $('novo').onclick = function () { ir('item', {}); };
+  };
+
+  function fecharModal() { $('modal').innerHTML = ''; }
+  function detalheItem(id) {
+    var i = item(id), s = sess();
+    var emUso = S.data.eventos.filter(function (e) { return e.status !== 'concluido' && e.linhas.some(function (l) { return l.item_id === id; }); });
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="' + esc(i.nome) + '">' +
+      '<div class="ph bigph">' + foto(i) + '</div><h2>' + esc(i.nome) + '</h2>' +
+      '<dl class="kv"><dt>Categoria</dt><dd>' + esc(i.categoria) + '</dd><dt>Total</dt><dd>' + i.qtd_total + '</dd><dt>Disponível</dt><dd>' + i.disponivel + '</dd>' +
+      (i.descricao ? '<dt>Descrição</dt><dd>' + esc(i.descricao) + '</dd>' : '') +
+      (emUso.length ? '<dt>Em eventos</dt><dd>' + emUso.map(function (e) { var l = e.linhas.filter(function (x) { return x.item_id === id; })[0]; return l.qtd_saida + ' em ' + esc(e.nome); }).join('<br>') + '</dd>' : '') + '</dl>' +
+      '<div id="mx"></div><div class="row" style="margin-top:18px">' +
+      (s && s.inventario ? '<button class="btn" id="m-ed">Editar</button><button class="btn" id="m-bx">Dar baixa</button><button class="btn danger" id="m-ex">Excluir</button>' : '') +
+      '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
+    $('mbg').onclick = function (e) { if (e.target.id === 'mbg') fecharModal(); };
+    $('m-fc').onclick = fecharModal;
+    if (!$('m-ed')) return;
+    $('m-ed').onclick = function () { fecharModal(); ir('item', { id: id }); };
+    $('m-bx').onclick = function () {
+      $('mx').innerHTML = '<h3>Dar baixa</h3><p class="hint">Use para quebra, perda ou descarte fora de evento.</p>' +
+        '<label class="f" for="bq">Quantidade</label><input type="number" id="bq" min="1" inputmode="numeric">' +
+        '<label class="f" for="bm">Motivo</label><textarea id="bm" placeholder="Ex.: 3 quebraram na lavagem"></textarea>' +
+        '<div id="erro" class="err" hidden></div><div style="height:12px"></div><button class="btn primary block" id="bok">Confirmar baixa</button>';
+      $('bok').onclick = function () {
+        fazer(this, api('baixaItem', { id: id, qtd: $('bq').value, motivo: $('bm').value }), function () { fecharModal(); toast('Baixa registrada'); render(); });
+      };
+    };
+    $('m-ex').onclick = function () {
+      $('mx').innerHTML = '<div class="err">Excluir <b>' + esc(i.nome) + '</b> do inventário? O histórico continua guardado.</div>' +
+        '<div id="erro" class="err" hidden></div><button class="btn danger block" id="exok">Sim, excluir</button>';
+      $('exok').onclick = function () { fazer(this, api('excluirItem', { id: id }), function () { fecharModal(); toast('Item excluído'); render(); }); };
+    };
+  }
+
+  function comprimir(file, max) {
+    return new Promise(function (res, rej) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var k = Math.min(1, max / Math.max(img.width, img.height));
+        var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        res(c.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = function () { rej(new Error('Não consegui abrir essa foto.')); };
+      img.src = url;
+    });
+  }
+
+  V.item = function () {
+    var i = S.p.id ? item(S.p.id) : { nome: '', categoria: S.cat !== 'Todos' ? S.cat : '', descricao: '', qtd_total: '' };
+    var nova = null;
+    header(S.p.id ? 'Editar item' : 'Cadastrar item', true);
+    var cats = S.data.categorias.slice();
+    S.data.itens.forEach(function (x) { if (cats.indexOf(x.categoria) < 0) cats.push(x.categoria); });
+    $('app').innerHTML = '<form id="f">' +
+      '<div class="ph bigph" id="prev" style="aspect-ratio:4/3;border-radius:14px;font-size:48px">' + (i.foto ? foto(i) : 'Foto') + '</div>' +
+      '<label class="btn block" style="margin-top:10px" for="fo">' + (i.foto ? 'Trocar foto' : 'Tirar ou escolher foto') + '</label>' +
+      '<input type="file" id="fo" accept="image/*" hidden>' +
+      '<label class="f" for="nm">Nome do item</label><input type="text" id="nm" value="' + esc(i.nome) + '" placeholder="Ex.: Bandeja espelhada retangular" required>' +
+      '<label class="f" for="ct">Categoria</label><input type="text" id="ct" list="cats" value="' + esc(i.categoria) + '" placeholder="Ex.: Bandejas">' +
+      '<datalist id="cats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
+      '<label class="f" for="qt">Quantidade total</label><input type="number" id="qt" min="0" inputmode="numeric" value="' + esc(i.qtd_total) + '" required>' +
+      '<label class="f" for="ds">Observação (opcional)</label><textarea id="ds" placeholder="Ex.: estilo, tamanho, cor">' + esc(i.descricao) + '</textarea>' +
+      '<div id="erro" class="err" hidden></div></form>';
+    bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
+    $('fo').onchange = function () {
+      var f = this.files[0]; if (!f) return;
+      comprimir(f, IS_GAS ? 1000 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
+        .catch(function (e) { S.erro = e.message; mostrarErro(); });
+    };
+    $('cn').onclick = voltar;
+    $('ok').onclick = function () {
+      fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, categoria: $('ct').value, qtd_total: $('qt').value, descricao: $('ds').value, fotoNova: nova } }),
+        function () { toast('Item salvo'); voltar(); });
+    };
+  };
+
+  V.eventos = function () {
+    var s = sess();
+    header('Eventos', true);
+    bar(s ? (S.data.agenda ? '<button class="btn" id="dag">Puxar da agenda</button>' : '') + '<button class="btn primary" id="novo">+ Novo evento</button>' : '');
+    var evs = S.data.eventos.slice().sort(function (a, b) {
+      var oa = a.status === 'concluido' ? 1 : 0, ob = b.status === 'concluido' ? 1 : 0;
+      return oa - ob || (oa ? String(b.data).localeCompare(a.data) : String(a.data).localeCompare(b.data));
+    });
+    $('app').innerHTML = evs.length ? '<div class="list">' + evs.map(function (e) {
+      var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+      var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < l.qtd_saida; });
+      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
+        '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : STATUS[e.status]) + '</span></button>';
+    }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
+    if (s && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda sem lista de material.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
+    document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
+    if ($('novo')) $('novo').onclick = function () { ir('eventoForm', {}); };
+    if ($('dag')) $('dag').onclick = function () { ir('agenda'); };
+    if ($('agl')) api('listarAgenda').then(function (l) {
+      if (!$('agl')) return;
+      l = l.filter(function (c) { return !c.evento_id; });
+      $('agl').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
+        return '<button class="li" data-ak="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
+          (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div><span class="pill montando">Criar lista</span></button>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum compromisso novo na agenda nos próximos 90 dias.</div>';
+      document.querySelectorAll('[data-ak]').forEach(function (b) { b.onclick = function () { ir('eventoForm', { agenda: l[+b.dataset.ak] }); }; });
+    }).catch(function (e) { if ($('agl')) $('agl').innerHTML = erroAgenda(e); });
+  };
+
+  function erroAgenda(e) {
+    var m = String(e && e.message || '');
+    var perm = !/não tem acesso à agenda/.test(m) && /permiss|CalendarApp|authoriz|autoriza/i.test(m);
+    return '<div class="err">' + (perm ? 'O app ainda não tem permissão para ler sua Agenda. No Apps Script, escolha a função <b>configurar</b>, clique em Executar e autorize. Depois publique uma Nova versão.<br><small>Detalhe: ' + esc(m) + '</small>'
+      : 'Não consegui ler a Agenda: ' + esc(m)) + '</div>';
+  }
+
+  V.agenda = function () {
+    header('Puxar da agenda', true);
+    bar('');
+    $('app').innerHTML = '<div class="loading">Lendo sua Agenda Google…</div>';
+    api('listarAgenda').then(function (l) {
+      $('app').innerHTML = '<p class="sub">Compromissos dos próximos 90 dias. Escolha um para montar a lista de material.</p>' +
+        (l.length ? '<div class="list">' + l.map(function (c, k) {
+          return '<button class="li" data-k="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
+            (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div>' +
+            (c.evento_id ? '<span class="pill concluido">Já tem lista</span>' : '<span class="pill montando">Criar lista</span>') + '</button>';
+        }).join('') + '</div>' : '<div class="empty">Nenhum compromisso nos próximos 90 dias.</div>');
+      document.querySelectorAll('[data-k]').forEach(function (b) {
+        b.onclick = function () {
+          var c = l[+b.dataset.k];
+          if (c.evento_id) ir('evento', { id: c.evento_id });
+          else ir('eventoForm', { agenda: c });
+        };
+      });
+    }).catch(function (e) { $('app').innerHTML = erroAgenda(e); });
+  };
+
+  V.eventoForm = function () {
+    var c = S.p.agenda;
+    var e = S.p.id ? evento(S.p.id) : c ? { nome: c.titulo, data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [] }
+      : { nome: '', data: '', local: '', obs: '', hora_inicio: '', hora_fim: '', prestadores: [] };
+    var prest = e.prestadores.length ? e.prestadores.slice() : [{ nome: '', telefone: '' }];
+    header(S.p.id ? 'Editar evento' : 'Novo evento', true);
+    function linhasPrest() {
+      return prest.map(function (p, k) {
+        return '<div class="prest"><input type="text" placeholder="Nome" data-pn="' + k + '" value="' + esc(p.nome) + '" aria-label="Nome do prestador">' +
+          '<input type="tel" placeholder="Telefone" data-pt="' + k + '" value="' + esc(p.telefone) + '" aria-label="Telefone do prestador">' +
+          '<button type="button" data-px="' + k + '" aria-label="Remover">×</button></div>';
+      }).join('');
+    }
+    $('app').innerHTML = '<form id="f"><label class="f" for="nm">Nome do evento</label><input type="text" id="nm" value="' + esc(e.nome) + '" placeholder="Ex.: Casamento Ana e Pedro" required>' +
+      '<label class="f" for="dt">Data</label><input type="date" id="dt" value="' + esc(e.data) + '">' +
+      '<div class="row"><div><label class="f" for="hi">Começa às</label><input type="time" id="hi" value="' + esc(e.hora_inicio) + '"></div>' +
+      '<div><label class="f" for="hf">Termina às</label><input type="time" id="hf" value="' + esc(e.hora_fim) + '"></div></div>' +
+      '<label class="f" for="lc">Local</label><input type="text" id="lc" value="' + esc(e.local) + '">' +
+      (S.data.agenda ? '<p class="hint">' + (c ? 'Este evento fica ligado ao compromisso da sua agenda. A lista de material aparece na descrição dele.'
+        : 'O evento aparece na sua Agenda Google com a lista de material na descrição. Sem horário, entra como dia inteiro.') + '</p>' : '') +
+      '<label class="f">Prestadores do evento</label><p class="hint" style="margin-top:0">Quem estiver aqui poderá registrar o retorno do material usando o próprio telefone.</p>' +
+      '<div id="pl">' + linhasPrest() + '</div><button type="button" class="btn" id="pa">+ Adicionar prestador</button>' +
+      '<label class="f" for="ob">Observações (opcional)</label><textarea id="ob">' + esc(e.obs) + '</textarea><div id="erro" class="err" hidden></div></form>';
+    function sync() {
+      document.querySelectorAll('[data-pn]').forEach(function (x) { prest[x.dataset.pn].nome = x.value; });
+      document.querySelectorAll('[data-pt]').forEach(function (x) { prest[x.dataset.pt].telefone = x.value; });
+    }
+    function ligar() {
+      document.querySelectorAll('[data-px]').forEach(function (b) { b.onclick = function () { sync(); prest.splice(+b.dataset.px, 1); $('pl').innerHTML = linhasPrest(); ligar(); }; });
+    }
+    ligar();
+    $('pa').onclick = function () { sync(); prest.push({ nome: '', telefone: '' }); $('pl').innerHTML = linhasPrest(); ligar(); };
+    bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">' + (S.p.id ? 'Salvar' : 'Criar evento') + '</button>');
+    $('cn').onclick = voltar;
+    $('ok').onclick = function () {
+      sync();
+      fazer(this, api('salvarEvento', { evento: { id: S.p.id, nome: $('nm').value, data: $('dt').value, hora_inicio: $('hi').value, hora_fim: $('hf').value, local: $('lc').value, obs: $('ob').value, prestadores: prest, agenda_id: c ? c.id : '' } }),
+        function (r) { toast('Evento salvo'); if (S.p.id) voltar(); else { if (c) S.stack.pop(); ir('evento', { id: r.id }, true); } });
+    };
+  };
+
+  V.evento = function () {
+    var e = evento(S.p.id), s = sess();
+    if (!e) { inicio(); return; }
+    header(e.nome, true);
+    var podeRet = e.status === 'em_evento' && (s || souPrestador(e));
+    var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+    var h = '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span><span class="hint">' + pecas + ' peças</span></div>' +
+      '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
+      (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
+      '<dt>Prestadores</dt><dd>' + (e.prestadores.length ? e.prestadores.map(function (p) { return esc(p.nome) + ' · ' + esc(p.telefone); }).join('<br>') : 'nenhum cadastrado') + '</dd>' +
+      (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
+      (e.status === 'concluido' ? '<dt>Retorno por</dt><dd>' + esc(e.retorno_por) + '<br>' + quando(e.concluido_em) + '</dd>' : '') + '</dl></div>';
+    h += '<h2>Material</h2>';
+    if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
+    else h += '<div class="list">' + e.linhas.map(function (l) {
+      var it = item(l.item_id) || { nome: l.nome };
+      var ret = l.qtd_retorno != null, falt = ret && l.qtd_retorno < l.qtd_saida;
+      return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(it.nome) + '</div>' +
+        '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
+        (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc(l.justificativa) + '</div>' : '') + '</div>' +
+        (falt ? '<span class="pill falta">−' + (l.qtd_saida - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
+    }).join('') + '</div>';
+    if (e.status === 'em_evento' && !podeRet)
+      h += '<p class="hint" style="margin-top:16px">Só os prestadores deste evento podem registrar o retorno. Seu telefone (' + esc(S.who.telefone) + ') não está na lista. Peça ao estoquista para incluir você.</p>';
+    if (s && e.status !== 'concluido') h += '<div class="row" style="margin-top:22px"><button class="btn" id="ed">Editar dados e prestadores</button>' +
+      (e.status === 'montando' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '<button class="btn" id="reab">Reabrir lista</button>') + '</div><div id="mx"></div>';
+    h += '<div id="erro" class="err" hidden></div>';
+    $('app').innerHTML = h;
+    if (e.status === 'montando' && s) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Confirmar saída</button>' : ''));
+    else if (podeRet) bar('<button class="btn primary" id="rt">Registrar retorno</button>');
+    else bar('');
+    if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
+    if ($('cs')) $('cs').onclick = function () { fazer(this, api('confirmarSaida', { id: e.id }), function () { toast('Saída confirmada'); render(); }); };
+    if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
+    if ($('ed')) $('ed').onclick = function () { ir('eventoForm', { id: e.id }); };
+    if ($('reab')) $('reab').onclick = function () { fazer(this, api('reabrirMontagem', { id: e.id }), function () { toast('Lista reaberta para ajustes'); render(); }); };
+    if ($('ex')) $('ex').onclick = function () {
+      $('mx').innerHTML = '<div class="err">Excluir o evento <b>' + esc(e.nome) + '</b> e sua lista de material?</div><button class="btn danger block" id="exok">Sim, excluir</button>';
+      $('exok').onclick = function () { fazer(this, api('excluirEvento', { id: e.id }), function () { toast('Evento excluído'); voltar(); }); };
+    };
+  };
+
+  V.montar = function () {
+    var e = evento(S.p.id);
+    header('Separar: ' + e.nome, true);
+    var qtd = S.p.qtd || (S.p.qtd = {});
+    if (!S.p.ini) { e.linhas.forEach(function (l) { qtd[l.item_id] = l.qtd_saida; }); S.p.ini = true; }
+    function livre(i) { return i.disponivel + (e.linhas.filter(function (l) { return l.item_id === i.id; })[0] || { qtd_saida: 0 }).qtd_saida; }
+    $('app').innerHTML = busca() + '<p class="hint" style="margin:4px 0 10px">Use + e − ou digite a quantidade separada de cada item.</p><div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
+    function total() {
+      var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } });
+      $('tot').textContent = n + ' itens · ' + p + ' peças';
+    }
+    function desenhar() {
+      var l = filtrar(S.data.itens).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || a.nome.localeCompare(b.nome); });
+      $('lst').innerHTML = l.length ? l.map(function (i) {
+        return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(i.nome) + '</div><div class="qty">' + livre(i) + ' disponíveis</div></div>' +
+          '<div class="stepper"><button type="button" data-m="' + i.id + '" aria-label="Menos">−</button><input type="number" min="0" inputmode="numeric" data-q="' + i.id + '" value="' + (qtd[i.id] || '') + '" placeholder="0" aria-label="Quantidade de ' + esc(i.nome) + '">' +
+          '<button type="button" data-p="' + i.id + '" aria-label="Mais">+</button></div></div>';
+      }).join('') : '<div class="empty">Nenhum item encontrado.</div>';
+      function set(id, v) { var max = livre(item(id)); v = Math.max(0, Math.min(max, v || 0)); qtd[id] = v; document.querySelector('[data-q="' + id + '"]').value = v || ''; total(); if (v === max && max > 0) toast('Máximo disponível: ' + max); }
+      document.querySelectorAll('[data-m]').forEach(function (b) { b.onclick = function () { set(b.dataset.m, (qtd[b.dataset.m] || 0) - 1); }; });
+      document.querySelectorAll('[data-p]').forEach(function (b) { b.onclick = function () { set(b.dataset.p, (qtd[b.dataset.p] || 0) + 1); }; });
+      document.querySelectorAll('[data-q]').forEach(function (x) { x.onchange = function () { set(x.dataset.q, parseInt(x.value, 10)); }; });
+    }
+    bar('<span id="tot" class="hint" style="flex:1"></span><button class="btn primary" id="ok">Salvar lista</button>');
+    ligarBusca(desenhar); desenhar(); total();
+    $('ok').onclick = function () {
+      var linhas = Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).map(function (k) { return { item_id: k, qtd: qtd[k] }; });
+      fazer(this, api('salvarListaEvento', { evento_id: e.id, linhas: linhas }), function () { toast('Lista salva'); voltar(); });
+    };
+  };
+
+  V.retorno = function () {
+    var e = evento(S.p.id);
+    header('Retorno: ' + e.nome, true);
+    var r = S.p.r || (S.p.r = {});
+    $('app').innerHTML = '<p class="sub">Conte o que voltou do evento. Se voltou menos do que saiu, explique o motivo.</p>' +
+      '<button class="btn block" id="tudo">Voltou tudo certo (preencher tudo)</button><div style="height:12px"></div>' +
+      '<div class="list">' + e.linhas.map(function (l) {
+        var it = item(l.item_id) || { nome: l.nome };
+        return '<div class="ret" id="r-' + l.item_id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(it.nome) + '</div><div class="qty">Saiu <b>' + l.qtd_saida + '</b></div></div>' +
+          '<div><label class="hint" for="v-' + l.item_id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + l.item_id + '" data-v="' + l.item_id + '" style="width:84px;text-align:center"></div></div>' +
+          '<div data-j="' + l.item_id + '" hidden><label class="f" style="margin-top:0" for="j-' + l.item_id + '">Por que voltaram menos?</label><textarea id="j-' + l.item_id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
+      }).join('') + '</div><div id="erro" class="err" hidden></div>';
+    function upd(id) {
+      var l = e.linhas.filter(function (x) { return x.item_id === id; })[0];
+      var v = $('v-' + id).value, falta = v !== '' && +v < l.qtd_saida;
+      document.querySelector('[data-j="' + id + '"]').hidden = !falta;
+      $('r-' + id).classList.toggle('short', falta);
+    }
+    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { upd(x.dataset.v); }; });
+    $('tudo').onclick = function () { e.linhas.forEach(function (l) { $('v-' + l.item_id).value = l.qtd_saida; upd(l.item_id); }); };
+    bar('<button class="btn primary" id="ok">Enviar retorno</button>');
+    $('ok').onclick = function () {
+      var linhas = e.linhas.map(function (l) { return { item_id: l.item_id, qtd: $('v-' + l.item_id).value, justificativa: $('j-' + l.item_id).value }; });
+      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas }), function () { toast('Retorno registrado. Obrigado!'); voltar(); });
+    };
+  };
+
+  V.pessoas = function () {
+    header('Equipe e senhas', true);
+    bar('<button class="btn primary" id="novo">+ Cadastrar estoquista</button>');
+    var ps = S.data.pessoas || [];
+    $('app').innerHTML = '<h2>Estoquistas</h2><p class="sub">Cada estoquista tem uma senha pessoal. Marque quem pode incluir e excluir itens do inventário.</p>' +
+      (ps.length ? '<div class="list">' + ps.map(function (p) {
+        return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
+          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.pode_inventario ? '<span class="pill concluido">Mexe no inventário</span>' : '<span class="pill montando">Só eventos</span>') + '</button>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum estoquista cadastrado.</div>') +
+      '<h2>Senha master</h2><p class="sub">Usada pelos coordenadores. Dá acesso total.</p>' +
+      '<label class="f" for="nm2">Nova senha master</label><input type="password" id="nm2" autocomplete="new-password">' +
+      '<div style="height:10px"></div><button class="btn block" id="tm">Trocar senha master</button><div id="erro" class="err" hidden></div>' +
+      (S.data.agenda ? '<h2>Agenda dos eventos</h2><div id="agc"><div class="loading">Lendo agendas…</div></div>' : '');
+    document.querySelectorAll('[data-p]').forEach(function (b) { b.onclick = function () { ir('pessoaForm', { id: b.dataset.p }); }; });
+    $('novo').onclick = function () { ir('pessoaForm', {}); };
+    $('tm').onclick = function () { fazer(this, api('trocarMaster', { nova: $('nm2').value }), function () { toast('Senha master trocada'); render(); }); };
+    if ($('agc')) api('infoAgenda').then(function (inf) {
+      if (!$('agc')) return;
+      var tem = inf.agendas.some(function (a) { return a.id === inf.atual; });
+      var aviso = inf.acesso ? '<div class="err">A conta <b>' + esc(inf.conta) + '</b> ainda não tem acesso à agenda <b>' + esc(inf.atual) + '</b>. Compartilhe essa agenda com ela, com permissão para fazer alterações nos eventos.</div>'
+        : inf.atual ? '<div class="panel" style="color:var(--ok)">Usando a agenda <b>' + esc(inf.atual) + '</b>.</div>' : '';
+      $('agc').innerHTML = aviso + '<p class="sub">O app lê e grava eventos na agenda escolhida aqui. Ele funciona pela conta <b>' + esc(inf.conta) + '</b>, então essa conta precisa ter acesso à agenda.</p>' +
+        '<label class="f" for="ags">Agendas que essa conta enxerga</label><select id="ags"><option value="">Agenda principal de ' + esc(inf.conta) + '</option>' +
+        inf.agendas.map(function (a) { return '<option value="' + esc(a.id) + '"' + (a.id === inf.atual ? ' selected' : '') + '>' + esc(a.nome) + ' (' + esc(a.id) + ')</option>'; }).join('') +
+        (inf.atual && !tem ? '<option value="' + esc(inf.atual) + '" selected>' + esc(inf.atual) + '</option>' : '') + '</select>' +
+        '<label class="f" for="agi">Ou digite o endereço da agenda</label><input type="text" id="agi" placeholder="ex.: atendimento@suaempresa.com.br" value="' + (inf.atual && !tem ? esc(inf.atual) : '') + '">' +
+        '<div style="height:10px"></div><button class="btn block" id="agok">Usar esta agenda</button>';
+      $('agok').onclick = function () {
+        var id = $('agi').value.trim() || $('ags').value;
+        fazer(this, api('definirAgenda', { agenda_id: id }), function () { toast('Agenda escolhida'); render(); });
+      };
+    }).catch(function (e) { if ($('agc')) $('agc').innerHTML = erroAgenda(e); });
+  };
+
+  V.pessoaForm = function () {
+    var p = S.p.id ? (S.data.pessoas || []).filter(function (x) { return x.id === S.p.id; })[0] : { nome: '', telefone: '', pode_inventario: false, ativo: true };
+    header(S.p.id ? 'Editar estoquista' : 'Novo estoquista', true);
+    $('app').innerHTML = '<form id="f"><label class="f" for="nm">Nome</label><input type="text" id="nm" value="' + esc(p.nome) + '" required>' +
+      '<label class="f" for="tel">Telefone</label><input type="tel" id="tel" value="' + esc(p.telefone) + '">' +
+      '<label class="f" for="pw">' + (S.p.id ? 'Nova senha pessoal (deixe vazio para manter)' : 'Senha pessoal') + '</label><input type="text" id="pw" autocomplete="off">' +
+      '<label class="check"><input type="checkbox" id="inv"' + (p.pode_inventario ? ' checked' : '') + '> Pode incluir, editar e excluir itens do inventário</label>' +
+      '<label class="check"><input type="checkbox" id="atv"' + (p.ativo ? ' checked' : '') + '> Acesso liberado</label><div id="erro" class="err" hidden></div></form>';
+    bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
+    $('cn').onclick = voltar;
+    $('ok').onclick = function () {
+      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('inv').checked, ativo: $('atv').checked } }),
+        function () { toast('Salvo'); voltar(); });
+    };
+  };
+
+  V.historico = function () {
+    header('Histórico', true);
+    bar('');
+    $('app').innerHTML = '<div class="loading">Carregando histórico…</div>';
+    api('historico').then(function (h) {
+      S.p.h = h;
+      $('app').innerHTML = '<input type="text" id="hq" placeholder="Filtrar por nome, telefone, evento…" aria-label="Filtrar histórico"><div id="hl"></div>';
+      function des() {
+        var q = $('hq').value.toLowerCase();
+        var l = h.log.filter(function (x) { return !q || (x.nome + ' ' + x.telefone + ' ' + x.acao + ' ' + x.detalhe).toLowerCase().indexOf(q) >= 0; });
+        $('hl').innerHTML = l.length ? l.map(function (x) {
+          return '<div class="logi"><div class="t">' + quando(x.em) + ' · ' + esc(x.nome) + ' · ' + esc(x.telefone) + '</div><div><b>' + esc(x.acao) + '</b>' + (x.detalhe ? ' — ' + esc(x.detalhe) : '') + '</div></div>';
+        }).join('') : '<div class="empty" style="margin-top:12px">Nada encontrado.</div>';
+      }
+      $('hq').oninput = des; des();
+    }).catch(function (e) { $('app').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+  };
+
+  function render() {
+    fecharModal();
+    if (!S.who) { V.ident(); return; }
+    if (!S.data) { $('app').innerHTML = '<div class="loading">Carregando…</div>'; return; }
+    (V[S.view] || V.inicio)();
+    mostrarErro();
+  }
+
+  S.who = ls('who'); S.token = ls('token');
+  if (!S.who) { render(); }
+  else {
+    render();
+    api('entrar').catch(function () {}).then(recarregar).then(render).catch(function (e) { $('app').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+  }
+})();
+</script>
+
+</body></html>
