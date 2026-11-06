@@ -233,7 +233,7 @@ textarea { min-height: 80px }
     if (s) {
       if (s.papel === 'coordenador') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
         '<button class="tile" id="t-his"><b>Histórico</b><span>Quem acessou e o que mudou</span></button>';
-      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'coordenador' ? 'Coordenação' : 'Estoquista ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
+      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'coordenador' ? 'Coordenação' + (s.id ? ' · ' + s.nome : '') : 'Estoquista ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
     } else {
       h += '<button class="tile wide" id="t-log"><span style="flex:1"><b>Área da equipe</b><br><span>Estoquista ou coordenação: entre com sua senha</span></span><span class="btn">Entrar</span></button>';
     }
@@ -598,12 +598,12 @@ textarea { min-height: 80px }
 
   V.pessoas = function () {
     header('Equipe e senhas', true);
-    bar('<button class="btn primary" id="novo">+ Cadastrar estoquista</button>');
+    bar('<button class="btn primary" id="novo">+ Cadastrar pessoa</button>');
     var ps = S.data.pessoas || [];
-    $('app').innerHTML = '<h2>Estoquistas</h2><p class="sub">Cada estoquista tem uma senha pessoal. Marque quem pode incluir e excluir itens do inventário.</p>' +
+    $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é da coordenação (acesso total) e quem pode incluir e excluir itens do inventário.</p>' +
       (ps.length ? '<div class="list">' + ps.map(function (p) {
         return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
-          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.pode_inventario ? '<span class="pill concluido">Mexe no inventário</span>' : '<span class="pill montando">Só eventos</span>') + '</button>';
+          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Coordenação</span>' : p.pode_inventario ? '<span class="pill concluido">Mexe no inventário</span>' : '<span class="pill montando">Só eventos</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum estoquista cadastrado.</div>') +
       '<h2>Senha master</h2><p class="sub">Usada pelos coordenadores. Dá acesso total.</p>' +
       '<label class="f" for="nm2">Nova senha master</label><input type="password" id="nm2" autocomplete="new-password">' +
@@ -632,16 +632,17 @@ textarea { min-height: 80px }
 
   V.pessoaForm = function () {
     var p = S.p.id ? (S.data.pessoas || []).filter(function (x) { return x.id === S.p.id; })[0] : { nome: '', telefone: '', pode_inventario: false, ativo: true };
-    header(S.p.id ? 'Editar estoquista' : 'Novo estoquista', true);
+    header(S.p.id ? 'Editar pessoa da equipe' : 'Nova pessoa da equipe', true);
     $('app').innerHTML = '<form id="f"><label class="f" for="nm">Nome</label><input type="text" id="nm" value="' + esc(p.nome) + '" required>' +
       '<label class="f" for="tel">Telefone</label><input type="tel" id="tel" value="' + esc(p.telefone) + '">' +
       '<label class="f" for="pw">' + (S.p.id ? 'Nova senha pessoal (deixe vazio para manter)' : 'Senha pessoal') + '</label><input type="text" id="pw" autocomplete="off">' +
+      '<label class="check"><input type="checkbox" id="crd"' + (p.coordenador ? ' checked' : '') + '> Coordenação: acesso total, como a senha master</label>' +
       '<label class="check"><input type="checkbox" id="inv"' + (p.pode_inventario ? ' checked' : '') + '> Pode incluir, editar e excluir itens do inventário</label>' +
       '<label class="check"><input type="checkbox" id="atv"' + (p.ativo ? ' checked' : '') + '> Acesso liberado</label><div id="erro" class="err" hidden></div></form>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('inv').checked, ativo: $('atv').checked } }),
+      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('inv').checked, coordenador: $('crd').checked, ativo: $('atv').checked } }),
         function () { toast('Salvo'); voltar(); });
     };
   };

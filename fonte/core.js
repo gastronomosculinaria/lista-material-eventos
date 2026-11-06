@@ -28,6 +28,7 @@ var CORE = (function () {
     if (s.pessoa_id === 'master') return { papel: 'coordenador', nome: 'Coordenação', inventario: true, equipe: true };
     var p = porId(db.all('pessoas'), s.pessoa_id);
     if (!p || !sim(p.ativo)) return null;
+    if (sim(p.coordenador)) return { papel: 'coordenador', nome: p.nome, id: p.id, inventario: true, equipe: true };
     return { papel: 'estoquista', nome: p.nome, id: p.id, inventario: sim(p.pode_inventario), equipe: true };
   }
 
@@ -53,7 +54,7 @@ var CORE = (function () {
 
   function quemDe(p, s) {
     var q = { nome: texto(p.who && p.who.nome, 80), telefone: texto(p.who && p.who.telefone, 30) };
-    if (s) q.nome = q.nome + ' [' + (s.papel === 'coordenador' ? 'coordenação' : 'estoquista ' + s.nome) + ']';
+    if (s) q.nome = q.nome + ' [' + (s.papel === 'coordenador' ? 'coordenação' + (s.id ? ' ' + s.nome : '') : 'estoquista ' + s.nome) + ']';
     return q;
   }
 
@@ -118,7 +119,7 @@ var CORE = (function () {
       var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda };
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
-          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario) };
+          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
         });
         out.masterPadrao = !getConfig(db, 'master_hash');
       }
@@ -134,7 +135,7 @@ var CORE = (function () {
       if (h === master) { pessoaId = 'master'; nome = 'coordenação'; }
       else {
         var p2 = db.all('pessoas').filter(function (x) { return sim(x.ativo) && x.senha_hash === h; })[0];
-        if (p2) { pessoaId = p2.id; nome = 'estoquista ' + p2.nome; }
+        if (p2) { pessoaId = p2.id; nome = (sim(p2.coordenador) ? 'coordenação ' : 'estoquista ') + p2.nome; }
       }
       if (!pessoaId) { log(db, quem, 'Senha incorreta', ''); falha('Senha incorreta.'); }
       var token = uid() + uid();
@@ -331,7 +332,7 @@ var CORE = (function () {
       var x = p.pessoa || {};
       var nome = texto(x.nome, 80);
       if (!nome) falha('Informe o nome do estoquista.');
-      var dados = { nome: nome, telefone: texto(x.telefone, 30), pode_inventario: sim(x.pode_inventario) ? 'sim' : 'nao',
+      var dados = { nome: nome, telefone: texto(x.telefone, 30), pode_inventario: sim(x.pode_inventario) ? 'sim' : 'nao', coordenador: sim(x.coordenador) ? 'sim' : 'nao',
         ativo: x.ativo === false ? 'nao' : 'sim' };
       var senha = texto(x.senha, 100);
       if (senha) {
@@ -345,13 +346,13 @@ var CORE = (function () {
       if (x.id) {
         if (!porId(db.all('pessoas'), x.id)) falha('Pessoa não encontrada.');
         db.update('pessoas', x.id, dados);
-        log(db, quem, 'Alterou acesso de estoquista', nome + ' — inventário: ' + dados.pode_inventario + ', ativo: ' + dados.ativo + (senha ? ', senha trocada' : ''));
+        log(db, quem, 'Alterou acesso da equipe', nome + ' — coordenação: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario + ', ativo: ' + dados.ativo + (senha ? ', senha trocada' : ''));
         return true;
       }
       if (!senha) falha('Defina uma senha pessoal para o estoquista.');
       dados.id = uid(); dados.criado_em = agora();
       db.insert('pessoas', dados);
-      log(db, quem, 'Cadastrou estoquista', nome + ' ' + dados.telefone + ' — inventário: ' + dados.pode_inventario);
+      log(db, quem, 'Cadastrou pessoa da equipe', nome + ' ' + dados.telefone + ' — coordenação: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario);
       return true;
     },
 
@@ -407,7 +408,7 @@ var CORE = (function () {
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em'],
-    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em'],
+    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador'],
     sessoes: ['id', 'pessoa_id', 'criado_em'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
