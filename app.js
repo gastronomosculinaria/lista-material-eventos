@@ -515,11 +515,12 @@ var CORE = (function () {
 // ---- Google Apps Script: dados na Planilha, fotos no Google Drive ----
 
 function doGetApp_() {
-  return HtmlService.createHtmlOutput(APP_HTML)
+  var out = HtmlService.createHtmlOutput(APP_HTML)
     .setTitle('Gastrônomos: Material de Eventos')
-    .setFaviconUrl('https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-64.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  try { out.setFaviconUrl('https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-64.png'); } catch (e) {}
+  return out;
 }
 
 // Rode esta função uma vez pelo editor (botão Executar) para criar as abas.
