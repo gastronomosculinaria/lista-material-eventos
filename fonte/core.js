@@ -359,7 +359,8 @@ var CORE = (function () {
         var it = porId(itens, l.item_id);
         if (!it) return;
         var disp = num(it.qtd_total) - (res[it.id] || 0);
-        if (q > disp) falha('Só há ' + disp + ' disponíveis de "' + it.nome + '".');
+        // estoque 0 = ainda não contado: deixa separar sem limite
+        if (num(it.qtd_total) > 0 && q > disp) falha('Só há ' + Math.max(0, disp) + ' disponíveis de "' + it.nome + '".');
         novas.push({ id: uid(), evento_id: ev.id, item_id: it.id, item_nome: it.nome, qtd_saida: String(q),
           qtd_retorno: '', justificativa: '' });
       });

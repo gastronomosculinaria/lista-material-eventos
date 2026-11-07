@@ -310,7 +310,7 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 11 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 12 • Gastrônomos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
@@ -742,7 +742,7 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
       (e.status === 'montando' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '<button class="btn" id="reab">Reabrir lista</button>') + '</div><div id="mx"></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
-    if (e.status === 'montando' && s) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Confirmar saída</button>' : ''));
+    if (e.status === 'montando' && s) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Fechar lista</button>' : ''));
     else if (podeRet) bar('<button class="btn primary" id="rt">Registrar retorno</button>');
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
@@ -775,7 +775,7 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
       }
       try { navigator.clipboard.writeText(t).then(function () { toast('Lista copiada. Cole no WhatsApp.'); }, mostrar); } catch (x) { mostrar(); }
     };
-    if ($('cs')) $('cs').onclick = function () { fazer(this, api('confirmarSaida', { id: e.id }), function () { toast('Saída confirmada'); render(); }); };
+    if ($('cs')) $('cs').onclick = function () { if (!confirm('Fechar a lista e liberar a saída do material para o evento?')) return; fazer(this, api('confirmarSaida', { id: e.id }), function () { toast('Lista fechada. Material liberado para o evento.'); render(); }); };
     if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
     if ($('ed')) $('ed').onclick = function () { ir('eventoForm', { id: e.id }); };
     if ($('reab')) $('reab').onclick = function () { fazer(this, api('reabrirMontagem', { id: e.id }), function () { toast('Lista reaberta para ajustes'); render(); }); };
@@ -790,7 +790,7 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
     header('Separar: ' + e.nome, true);
     var qtd = S.p.qtd || (S.p.qtd = {});
     if (!S.p.ini) { e.linhas.forEach(function (l) { qtd[l.item_id] = l.qtd_saida; }); S.p.ini = true; }
-    function livre(i) { return i.disponivel + (e.linhas.filter(function (l) { return l.item_id === i.id; })[0] || { qtd_saida: 0 }).qtd_saida; }
+    function livre(i) { if (!(i.qtd_total > 0)) return Infinity; return i.disponivel + (e.linhas.filter(function (l) { return l.item_id === i.id; })[0] || { qtd_saida: 0 }).qtd_saida; }
     $('app').innerHTML = busca() + '<p class="hint" style="margin:4px 0 10px">Use + e − ou digite a quantidade separada de cada item.</p><div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
     function total() {
       var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } });
@@ -799,7 +799,7 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
     function desenhar() {
       var l = filtrar(S.data.itens).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || a.nome.localeCompare(b.nome); });
       function linhaM(i) {
-        return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(i.nome) + '</div><div class="qty">' + livre(i) + ' disponíveis</div></div>' +
+        return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(i.nome) + '</div><div class="qty">' + (livre(i) === Infinity ? 'estoque não contado' : livre(i) + ' disponíveis') + '</div></div>' +
           '<div class="stepper"><button type="button" data-m="' + i.id + '" aria-label="Menos">−</button><input type="number" min="0" inputmode="numeric" data-q="' + i.id + '" value="' + (qtd[i.id] || '') + '" placeholder="0" aria-label="Quantidade de ' + esc(i.nome) + '">' +
           '<button type="button" data-p="' + i.id + '" aria-label="Mais">+</button></div></div>';
       }
@@ -807,16 +807,23 @@ var APP_URL = "https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBws
         var sep = g[1].filter(function (i) { return qtd[i.id] > 0; }).length;
         return (S.grp === 'Todos' ? cabGrupo(g[0], sep ? sep + ' separados' : null) : '') + porSub(g[0], g[1], function (i) { return i; }, linhaM);
       }).join('') : '<div class="empty">Nenhum item encontrado.</div>';
-      function set(id, v) { var max = livre(item(id)); v = Math.max(0, Math.min(max, v || 0)); qtd[id] = v; document.querySelector('[data-q="' + id + '"]').value = v || ''; total(); if (v === max && max > 0) toast('Máximo disponível: ' + max); }
+      function set(id, v) { var max = livre(item(id)); v = Math.max(0, Math.min(max, v || 0)); qtd[id] = v; document.querySelector('[data-q="' + id + '"]').value = v || ''; total(); if (v === max && max > 0 && max !== Infinity) toast('Máximo disponível: ' + max); }
       document.querySelectorAll('[data-m]').forEach(function (b) { b.onclick = function () { set(b.dataset.m, (qtd[b.dataset.m] || 0) - 1); }; });
       document.querySelectorAll('[data-p]').forEach(function (b) { b.onclick = function () { set(b.dataset.p, (qtd[b.dataset.p] || 0) + 1); }; });
       document.querySelectorAll('[data-q]').forEach(function (x) { x.onchange = function () { set(x.dataset.q, parseInt(x.value, 10)); }; });
     }
-    bar('<span id="tot" class="hint" style="flex:1"></span><button class="btn primary" id="ok">Salvar lista</button>');
+    bar('<span id="tot" class="hint" style="flex:1"></span><button class="btn" id="ok">Salvar</button><button class="btn primary" id="fecha">Fechar lista</button>');
     ligarBusca(desenhar); desenhar(); total();
     $('ok').onclick = function () {
       var linhas = Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).map(function (k) { return { item_id: k, qtd: qtd[k] }; });
       fazer(this, api('salvarListaEvento', { evento_id: e.id, linhas: linhas }), function () { toast('Lista salva'); voltar(); });
+    };
+    $('fecha').onclick = function () {
+      var linhas = Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).map(function (k) { return { item_id: k, qtd: qtd[k] }; });
+      if (!linhas.length) { toast('Separe pelo menos um item antes de fechar.'); return; }
+      if (!confirm('Fechar a lista e liberar a saída do material para o evento?\nDepois disso ela só muda se alguém da equipe reabrir.')) return;
+      fazer(this, api('salvarListaEvento', { evento_id: e.id, linhas: linhas }).then(function () { return api('confirmarSaida', { id: e.id }); }),
+        function () { toast('Lista fechada. Material liberado para o evento.'); voltar(); });
     };
   };
 
