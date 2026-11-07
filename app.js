@@ -7,6 +7,8 @@ var CORE = (function () {
   var GRUPOS = ['Material', 'Caixa de secos', 'Caixa de talher', 'Caixa de limpeza', 'Bebidas'];
   // Grupos de consumo: se voltar menos, a justificativa é opcional (o que faltou foi consumido).
   var CONSUMO = ['Caixa de limpeza', 'Bebidas', 'Caixa de secos'];
+  // Motivos padronizados quando volta menos do que saiu (ou na baixa avulsa).
+  var MOTIVOS = ['Quebrou', 'Sumiu / extraviado', 'Danificado (precisa de conserto)', 'Ficou com o cliente', 'Consumido', 'Outro'];
   var SUBGRUPOS = { Bebidas: ['Água', 'Refrigerantes', 'Cerveja', 'Sucos', 'Matte', 'Matte Zero', 'Matte Limão', 'Café', 'Chá', 'Leite'] };
   // Itens incluídos automaticamente uma única vez (pedidos pelo usuário).
   var PACOTES = [
@@ -92,7 +94,7 @@ var CORE = (function () {
     });
   }
 
-  // Quanto de cada item está comprometido em eventos ainda não concluídos.
+  // Quanto de cada item está comprometido em eventos ainda não concluídos (qualquer data).
   function reservas(db, exceto) {
     var ativos = {};
     db.all('eventos').forEach(function (e) { if (e.status !== 'concluido' && e.id !== exceto) ativos[e.id] = true; });
@@ -100,6 +102,48 @@ var CORE = (function () {
     db.all('evento_itens').forEach(function (l) { if (ativos[l.evento_id]) r[l.item_id] = (r[l.item_id] || 0) + num(l.qtd_saida); });
     return r;
   }
+  // O que conflita com um evento: material que já saiu (em outro evento) ou que está separado
+  // para outro evento na MESMA data. Devolve { item_id: { qtd, eventos: [nomes] } }.
+  function comprometido(db, ev) {
+    var conf = {};
+    db.all('eventos').forEach(function (y) {
+      if (y.status === 'concluido' || (ev && y.id === ev.id)) return;
+      if (y.status === 'em_evento' || (ev && ev.data && y.data === ev.data)) conf[y.id] = y;
+    });
+    var r = {};
+    db.all('evento_itens').forEach(function (l) {
+      var y = conf[l.evento_id]; if (!y) return;
+      var x = r[l.item_id] || (r[l.item_id] = { qtd: 0, eventos: [] });
+      x.qtd += num(l.qtd_saida); if (x.eventos.indexOf(y.nome) < 0) x.eventos.push(y.nome);
+    });
+    return r;
+  }
+  // Material fora do depósito agora (eventos com saída confirmada).
+  function foraDoDeposito(db) {
+    var fora = {}, r = {};
+    db.all('eventos').forEach(function (e) { if (e.status === 'em_evento') fora[e.id] = true; });
+    db.all('evento_itens').forEach(function (l) { if (fora[l.evento_id]) r[l.item_id] = (r[l.item_id] || 0) + num(l.qtd_saida); });
+    return r;
+  }
+  function nomeItem(it) { return it ? it.nome + (it.numero ? ' nº ' + it.numero : '') : ''; }
+  function confere(db, ev, linhas, itens) {
+    var comp = comprometido(db, ev);
+    linhas.forEach(function (l) {
+      var it = porId(itens, l.item_id); if (!it) return;
+      var total = num(it.qtd_total); if (total <= 0) return; // estoque não contado: sem limite
+      var c = comp[it.id] || { qtd: 0, eventos: [] }, disp = Math.max(0, total - c.qtd), q = num(l.qtd != null ? l.qtd : l.qtd_saida);
+      if (q > disp) falha(disp ? 'Só há ' + disp + ' livres de "' + nomeItem(it) + '" para esta data. O resto está em: ' + c.eventos.join(', ') + '.'
+        : '"' + nomeItem(it) + '" já está reservado para ' + c.eventos.join(', ') + (it.tipo === 'equipamento' ? '' : ' (todas as ' + total + ' unidades)') + '.');
+    });
+  }
+  function semCochete(nome) { return texto(String(nome || '').replace(/\s*\[.*\]\s*$/, ''), 80).toLowerCase(); }
+  function conferente(p, quem) {
+    var c = texto(p.conferido, 80);
+    if (!c) falha('Informe quem conferiu o material junto com você.');
+    if (c.toLowerCase() === semCochete(quem.nome)) falha('A conferência precisa ser feita por outra pessoa, não por quem separou.');
+    return c;
+  }
+  function moeda(v) { return 'R$ ' + (Math.round(v * 100) / 100).toFixed(2).replace('.', ','); }
 
   function pedeEquipe(s) { if (!s) falha('Entre com sua senha na Área da equipe para fazer isso.'); }
   function pedeInventario(s) { pedeEquipe(s); if (!s.inventario) falha('Sua senha não tem permissão para alterar o inventário. Peça à coordenação.'); }
@@ -152,25 +196,27 @@ var CORE = (function () {
 
     carregar: function (db, p, s) {
       aplicarPacotes(db);
-      var res = reservas(db);
+      var fora = foraDoDeposito(db);
       var itens = db.all('itens').filter(function (i) { return sim(i.ativo); }).map(function (i) {
         var total = num(i.qtd_total);
         return { id: i.id, nome: i.nome, categoria: i.categoria, descricao: i.descricao, foto: i.foto, grupo: grupoDe(i), subgrupo: i.subgrupo || '',
-          qtd_total: total, disponivel: total - (res[i.id] || 0) };
+          tipo: i.tipo || '', numero: i.numero || '', custo: num(i.custo),
+          qtd_total: total, fora: fora[i.id] || 0, disponivel: total - (fora[i.id] || 0) };
       });
       var linhas = db.all('evento_itens');
       var eventos = db.all('eventos').map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
           prestadores: json(e.prestadores, []), criado_por: e.criado_por, concluido_em: e.concluido_em,
-          retorno_por: e.retorno_por,
+          retorno_por: e.retorno_por, separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
-              justificativa: l.justificativa };
+              justificativa: l.justificativa, motivo: l.motivo || '' };
           }) };
       });
-      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO };
+      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
+        ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
@@ -209,26 +255,49 @@ var CORE = (function () {
       var it = p.item || {};
       var nome = texto(it.nome, 120);
       if (!nome) falha('Dê um nome ao item.');
+      var equip = it.tipo === 'equipamento';
       var dados = { nome: nome, categoria: texto(it.categoria, 60) || 'Outros', descricao: texto(it.descricao, 500), grupo: texto(it.grupo, 60) || 'Material', subgrupo: texto(it.subgrupo, 60),
-        qtd_total: String(Math.max(0, Math.round(num(it.qtd_total)))) };
+        tipo: equip ? 'equipamento' : '', numero: equip ? texto(it.numero, 20) : '', custo: it.custo === '' || it.custo == null ? '' : String(Math.max(0, num(it.custo))),
+        qtd_total: equip ? '1' : String(Math.max(0, Math.round(num(it.qtd_total)))) };
       if (it.fotoNova) dados.foto = db.salvarFoto(it.fotoNova, nome);
+      var todos = db.all('itens').filter(function (x) { return sim(x.ativo); });
+      function numeroUsado(n, exceto) {
+        return todos.some(function (x) { return x.id !== exceto && x.tipo === 'equipamento' && x.nome.toLowerCase() === nome.toLowerCase() && String(x.numero) === String(n); });
+      }
       if (it.id) {
         var antes = porId(db.all('itens'), it.id);
         if (!antes) falha('Item não encontrado.');
+        if (equip && dados.numero && numeroUsado(dados.numero, it.id)) falha('Já existe "' + nome + '" com o número ' + dados.numero + '.');
         db.update('itens', it.id, dados);
         var mud = [];
-        ['nome', 'grupo', 'subgrupo', 'categoria', 'descricao', 'qtd_total'].forEach(function (k) {
-          if (String(antes[k]) !== String(dados[k])) mud.push(k + ': "' + antes[k] + '" → "' + dados[k] + '"');
+        ['nome', 'numero', 'grupo', 'subgrupo', 'categoria', 'descricao', 'qtd_total', 'custo'].forEach(function (k) {
+          if (String(antes[k] || '') !== String(dados[k] || '')) mud.push(k + ': "' + (antes[k] || '') + '" → "' + dados[k] + '"');
         });
         if (dados.foto) mud.push('nova foto');
-        log(db, quem, 'Editou item do inventário', nome + (mud.length ? ' (' + mud.join('; ') + ')' : ''));
+        log(db, quem, 'Editou item do inventário', nomeItem(dados) + (mud.length ? ' (' + mud.join('; ') + ')' : ''));
         return { id: it.id };
       }
-      dados.id = uid(); dados.ativo = 'sim'; dados.criado_em = agora();
-      dados.foto = dados.foto || '';
-      db.insert('itens', dados);
-      log(db, quem, 'Incluiu item no inventário', nome + ' (' + dados.qtd_total + ' un., ' + dados.categoria + ')');
-      return { id: dados.id };
+      dados.ativo = 'sim'; dados.criado_em = agora(); dados.foto = dados.foto || '';
+      if (!equip) {
+        dados.id = uid(); db.insert('itens', dados);
+        log(db, quem, 'Incluiu item no inventário', nome + ' (' + dados.qtd_total + ' un., ' + dados.categoria + ')');
+        return { id: dados.id };
+      }
+      // equipamento: uma linha por unidade, cada uma com seu número
+      var n = Math.min(50, Math.max(1, Math.round(num(it.unidades) || 1)));
+      var maior = 0;
+      todos.forEach(function (x) { if (x.tipo === 'equipamento' && x.nome.toLowerCase() === nome.toLowerCase()) maior = Math.max(maior, Math.round(num(x.numero))); });
+      var ini = dados.numero ? Math.round(num(dados.numero)) : maior + 1;
+      var novos = [], k = ini;
+      while (novos.length < n) {
+        var rotulo = dados.numero && n === 1 ? dados.numero : (k < 10 ? '0' + k : String(k));
+        if (!numeroUsado(rotulo)) novos.push(Object.assign({}, dados, { id: uid(), numero: rotulo }));
+        else if (n === 1 && dados.numero) falha('Já existe "' + nome + '" com o número ' + rotulo + '.');
+        k++;
+      }
+      if (db.insertMany) db.insertMany('itens', novos); else novos.forEach(function (x) { db.insert('itens', x); });
+      log(db, quem, 'Incluiu equipamento no inventário', nome + ' nº ' + novos.map(function (x) { return x.numero; }).join(', '));
+      return { id: novos[0].id, criados: novos.length };
     },
 
     salvarVarios: function (db, p, s, quem) {
@@ -297,13 +366,15 @@ var CORE = (function () {
       var it = porId(db.all('itens'), p.id);
       if (!it) falha('Item não encontrado.');
       var q = Math.round(num(p.qtd));
-      var motivo = texto(p.motivo, 300);
+      var tipoM = MOTIVOS.indexOf(p.tipo_motivo) >= 0 ? p.tipo_motivo : '', det = texto(p.motivo, 300);
       if (q <= 0) falha('Informe a quantidade a dar baixa.');
-      if (!motivo) falha('Explique o motivo da baixa (ex.: quebrou na lavagem).');
+      if (!tipoM && !det) falha('Escolha o motivo da baixa.');
+      if (tipoM === 'Outro' && !det) falha('Explique o motivo em poucas palavras.');
+      var motivo = tipoM ? tipoM + (det ? ' — ' + det : '') : det;
       if (q > num(it.qtd_total)) falha('A baixa é maior que o total cadastrado (' + it.qtd_total + ').');
       db.update('itens', it.id, { qtd_total: String(num(it.qtd_total) - q) });
-      db.insert('baixas', { id: uid(), item_id: it.id, item_nome: it.nome, qtd: String(q), motivo: motivo,
-        evento_id: '', por: quem.nome + ' ' + quem.telefone, em: agora() });
+      db.insert('baixas', { id: uid(), item_id: it.id, item_nome: nomeItem(it), qtd: String(q), motivo: motivo,
+        evento_id: '', por: quem.nome + ' ' + quem.telefone, em: agora(), custo: num(it.custo) ? String(q * num(it.custo)) : '' });
       log(db, quem, 'Deu baixa em item', q + ' × ' + it.nome + ' — ' + motivo);
       return true;
     },
@@ -354,7 +425,6 @@ var CORE = (function () {
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'montando') falha('A saída deste evento já foi confirmada. A lista não pode mais ser alterada.');
-      var res = reservas(db, ev.id);
       var itens = db.all('itens');
       var novas = [];
       (p.linhas || []).forEach(function (l) {
@@ -362,12 +432,11 @@ var CORE = (function () {
         if (q <= 0) return;
         var it = porId(itens, l.item_id);
         if (!it) return;
-        var disp = num(it.qtd_total) - (res[it.id] || 0);
-        // estoque 0 = ainda não contado: deixa separar sem limite
-        if (num(it.qtd_total) > 0 && q > disp) falha('Só há ' + Math.max(0, disp) + ' disponíveis de "' + it.nome + '".');
-        novas.push({ id: uid(), evento_id: ev.id, item_id: it.id, item_nome: it.nome, qtd_saida: String(q),
-          qtd_retorno: '', justificativa: '' });
+        if (it.tipo === 'equipamento') q = 1;
+        novas.push({ id: uid(), evento_id: ev.id, item_id: it.id, item_nome: nomeItem(it), qtd_saida: String(q),
+          qtd_retorno: '', justificativa: '', motivo: '' });
       });
+      confere(db, ev, novas, itens);
       db.removeWhere('evento_itens', function (l) { return l.evento_id === ev.id; });
       novas.forEach(function (n) { db.insert('evento_itens', n); });
       log(db, quem, 'Montou lista de material', ev.nome + ': ' + novas.map(function (n) { return n.qtd_saida + ' × ' + n.item_nome; }).join(', '));
@@ -380,9 +449,12 @@ var CORE = (function () {
       var ev = porId(db.all('eventos'), p.id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'montando') falha('A saída já foi confirmada.');
-      if (!db.all('evento_itens').some(function (l) { return l.evento_id === ev.id; })) falha('A lista de material está vazia.');
-      db.update('eventos', ev.id, { status: 'em_evento' });
-      log(db, quem, 'Confirmou saída do material', ev.nome);
+      var minhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
+      if (!minhas.length) falha('A lista de material está vazia.');
+      var conf = conferente(p, quem);
+      confere(db, ev, minhas, db.all('itens'));
+      db.update('eventos', ev.id, { status: 'em_evento', separado_por: texto(p.who && p.who.nome, 80), conferido_saida: conf });
+      log(db, quem, 'Fechou a lista e liberou a saída', ev.nome + ' — separado por ' + texto(p.who && p.who.nome, 80) + ', conferido por ' + conf);
       sincAgenda(db, ev.id, quem);
       return true;
     },
@@ -406,7 +478,7 @@ var CORE = (function () {
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
-      var resumo = [], faltas = [], todosItens = db.all('itens');
+      var resumo = [], faltas = [], todosItens = db.all('itens'), confRet = conferente(p, quem), custoTotal = 0;
       linhas.forEach(function (l) {
         var itl = porId(todosItens, l.item_id), consumo = itl && CONSUMO.indexOf(grupoDe(itl)) >= 0;
         var e = envio[l.item_id];
@@ -414,23 +486,31 @@ var CORE = (function () {
         var q = Math.max(0, Math.round(num(e.qtd)));
         var saiu = num(l.qtd_saida);
         if (q > saiu) falha('"' + l.item_nome + '": voltaram mais (' + q + ') do que saíram (' + saiu + ').');
-        var just = texto(e.justificativa, 500);
-        if (q < saiu && !just && consumo) just = 'Consumido no evento';
-        if (q < saiu && !just) falha('Explique por que voltaram menos de "' + l.item_nome + '".');
-        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: q < saiu ? just : '' });
+        var just = texto(e.justificativa, 500), mot = MOTIVOS.indexOf(e.motivo) >= 0 ? e.motivo : '';
+        if (q < saiu) {
+          if (!mot && consumo) mot = 'Consumido';
+          if (!mot && just) mot = 'Outro';
+          if (!mot) falha('Escolha o motivo da falta de "' + l.item_nome + '".');
+          if (mot === 'Outro' && !just) falha('Explique em poucas palavras o que aconteceu com "' + l.item_nome + '".');
+        } else { mot = ''; just = ''; }
+        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
-        if (q < saiu) faltas.push({ l: l, falta: saiu - q, just: just });
+        if (q < saiu) {
+          var custo = itl ? num(itl.custo) * (saiu - q) : 0; custoTotal += custo;
+          faltas.push({ l: l, falta: saiu - q, just: mot + (just ? ' — ' + just : ''), custo: custo });
+        }
       });
       var itens = db.all('itens');
       faltas.forEach(function (f) {
         var it = porId(itens, f.l.item_id);
         if (it) db.update('itens', it.id, { qtd_total: String(Math.max(0, num(it.qtd_total) - f.falta)) });
         db.insert('baixas', { id: uid(), item_id: f.l.item_id, item_nome: f.l.item_nome, qtd: String(f.falta),
-          motivo: 'Evento ' + ev.nome + ': ' + f.just, evento_id: ev.id, por: quem.nome + ' ' + quem.telefone, em: agora() });
+          motivo: 'Evento ' + ev.nome + ': ' + f.just, evento_id: ev.id, por: quem.nome + ' ' + quem.telefone, em: agora(), custo: f.custo ? String(f.custo) : '' });
       });
-      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone });
+      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone, conferido_retorno: confRet });
       log(db, quem, 'Registrou retorno do material', ev.nome + ': ' + resumo.join(', ') +
-        (faltas.length ? ' | Faltas: ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : ''));
+        (faltas.length ? ' | Faltas: ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
+        (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Conferido por ' + confRet);
       sincAgenda(db, ev.id, quem);
       return true;
     },
@@ -497,6 +577,33 @@ var CORE = (function () {
       return true;
     },
 
+    salvarContagem: function (db, p, s, quem) {
+      pedeEquipe(s);
+      var ajustar = !!p.ajustar;
+      if (ajustar) pedeInventario(s);
+      var itens = db.all('itens'), fora = foraDoDeposito(db), em = agora(), regs = [], difs = [], porNome = quem.nome + ' ' + quem.telefone;
+      (p.linhas || []).forEach(function (l) {
+        var it = porId(itens, l.item_id);
+        if (!it || !sim(it.ativo) || l.contado === '' || l.contado == null) return;
+        var contado = Math.max(0, Math.round(num(l.contado)));
+        var esperado = Math.max(0, num(it.qtd_total) - (fora[it.id] || 0)), dif = contado - esperado;
+        regs.push({ id: uid(), em: em, por: porNome, item_id: it.id, item_nome: nomeItem(it), sistema: String(esperado), contado: String(contado),
+          diferenca: String(dif), ajustado: ajustar && dif ? 'sim' : 'nao' });
+        if (dif) difs.push({ it: it, dif: dif, esperado: esperado, contado: contado });
+      });
+      if (!regs.length) falha('Digite a quantidade contada de pelo menos um item.');
+      if (db.insertMany) db.insertMany('contagens', regs); else regs.forEach(function (r) { db.insert('contagens', r); });
+      if (ajustar) difs.forEach(function (d) {
+        db.update('itens', d.it.id, { qtd_total: String(Math.max(0, num(d.it.qtd_total) + d.dif)) });
+        if (d.dif < 0) db.insert('baixas', { id: uid(), item_id: d.it.id, item_nome: nomeItem(d.it), qtd: String(-d.dif), motivo: 'Contagem física: faltaram ' + (-d.dif),
+          evento_id: '', por: porNome, em: em, custo: num(d.it.custo) ? String(-d.dif * num(d.it.custo)) : '' });
+      });
+      setConfig(db, 'ultima_contagem', JSON.stringify({ em: em, por: texto(p.who && p.who.nome, 80), itens: regs.length, diferencas: difs.length }));
+      log(db, quem, ajustar ? 'Fez contagem física e corrigiu o estoque' : 'Fez contagem física', regs.length + ' itens contados, ' + difs.length + ' com diferença' +
+        (difs.length ? ': ' + difs.slice(0, 40).map(function (d) { return nomeItem(d.it) + ' (sistema ' + d.esperado + ', contado ' + d.contado + ')'; }).join('; ') : ''));
+      return { contados: regs.length, diferencas: difs.map(function (d) { return { nome: nomeItem(d.it), esperado: d.esperado, contado: d.contado, dif: d.dif }; }) };
+    },
+
     historico: function (db, p, s) {
       pedeCoord(s);
       return { log: db.ultimos('log', 400), baixas: db.ultimos('baixas', 200) };
@@ -511,11 +618,12 @@ var CORE = (function () {
   }
 
   var TABELAS = {
-    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo'],
+    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
-      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado'],
-    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa'],
-    baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em'],
+      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno'],
+    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo'],
+    baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
+    contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador'],
     sessoes: ['id', 'pessoa_id', 'criado_em'],
     config: ['id', 'valor'],
@@ -556,8 +664,12 @@ function apiApp_(acao, payload) {
   try {
     var leitura = !!LEITURAS_[acao];
     if (!leitura) travar();
+    // Sinal ruim: o celular pode reenviar o mesmo pedido. O código do pedido (rid) evita gravar duas vezes.
+    var rid = !leitura && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
+    if (rid) { var ja = cache.get(rid); if (ja) return JSON.parse(ja); }
     var db = novoDb_(); db.travar = travar;
     var r = { ok: true, data: CORE.handle(db, acao, payload) };
+    if (rid) try { cache.put(rid, JSON.stringify({ ok: true, data: r.data }), 1800); } catch (e) {}
     if (!leitura && !SEM_ESTADO_[acao]) {
       try { var db2 = novoDb_(); db2.travar = travar; r.estado = CORE.handle(db2, 'carregar', payload); } catch (e) {}
     }

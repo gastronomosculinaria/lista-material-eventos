@@ -15,6 +15,17 @@ open(os.path.join(d,'dist','demo.html'),'w',encoding='utf-8').write(demo)
 # Google Apps Script
 gas_ui=ui.replace('__MARCA__/',MARCA_URL).replace('/*__BACKEND__*/','')
 idx='<!DOCTYPE html>\n<html lang="pt-BR"><head><base target="_top"><meta charset="utf-8"></head><body>\n'+gas_ui+'\n</body></html>\n'
+# minifica (o Apps Script guarda a tela no cache, que aceita no máximo 100 KB por valor)
+import subprocess, tempfile
+def mini(h):
+    with tempfile.TemporaryDirectory() as t:
+        e=os.path.join(t,'e.html'); o=os.path.join(t,'o.html'); open(e,'w',encoding='utf-8').write(h)
+        subprocess.run(['node',os.path.join(d,'tools','minificar.js'),e,o],check=True)
+        return open(o,encoding='utf-8').read()
+idx=mini(idx)
+tam=len(idx.encode('utf-8'))
+print('index.html', tam, 'bytes')
+assert tam < 95000, 'index.html grande demais para o cache do Apps Script'
 open(os.path.join(d,'dist','index.html'),'w',encoding='utf-8').write(idx)
 import json
 open(os.path.join(d,'dist','Code.gs'),'w',encoding='utf-8').write(src('core.js')+'\n'+src('gas.js')+'\n// Tela do app (não precisa de arquivo HTML separado)\nvar APP_HTML = '+json.dumps(idx, ensure_ascii=False)+';\n')
@@ -51,7 +62,13 @@ head=('<!DOCTYPE html>\n<html lang="pt-BR"><head><meta charset="utf-8">'
   '<link rel="icon" href="'+MARCA_URL+'icone-64.png"><link rel="apple-touch-icon" href="'+MARCA_URL+'icone-180.png">'
   '<link rel="manifest" href="manifest.json"></head><body>\n')
 pg=ui.replace('__MARCA__/',MARCA_URL).replace('/*__BACKEND__*/','var APP_URL = '+json.dumps(APP_URL)+';')
-open(os.path.join(dc,'index.html'),'w',encoding='utf-8').write(head+pg+'\n</body></html>\n')
+open(os.path.join(dc,'index.html'),'w',encoding='utf-8').write(mini(head+pg+'\n</body></html>\n'))
 open(os.path.join(dc,'manifest.json'),'w',encoding='utf-8').write(json.dumps({'name':'Gastrônomos: Material de Eventos','short_name':'Material de Eventos','start_url':'.','display':'standalone','background_color':'#fbf7ee','theme_color':'#c0615e','icons':[{'src':MARCA_URL+'icone-180.png','sizes':'180x180','type':'image/png'},{'src':MARCA_URL+'icone-512.png','sizes':'512x512','type':'image/png'}]},ensure_ascii=False,indent=1))
 open(os.path.join(dc,'.nojekyll'),'w').write('')
 print('docs ok')
+# bibliotecas de QR (cópia própria no GitHub Pages, caso o CDN falhe)
+lib=os.path.join(dc,'lib'); os.makedirs(lib, exist_ok=True)
+for n in ('jsQR.js','qrcode.js'):
+    f=os.path.join(d,'tools','lib',n)
+    if os.path.exists(f): shutil.copy(f, os.path.join(lib,n))
+print('lib ok')

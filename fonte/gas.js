@@ -29,8 +29,12 @@ function api(acao, payload) {
   try {
     var leitura = !!LEITURAS_[acao];
     if (!leitura) travar();
+    // Sinal ruim: o celular pode reenviar o mesmo pedido. O código do pedido (rid) evita gravar duas vezes.
+    var rid = !leitura && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
+    if (rid) { var ja = cache.get(rid); if (ja) return JSON.parse(ja); }
     var db = novoDb_(); db.travar = travar;
     var r = { ok: true, data: CORE.handle(db, acao, payload) };
+    if (rid) try { cache.put(rid, JSON.stringify({ ok: true, data: r.data }), 1800); } catch (e) {}
     if (!leitura && !SEM_ESTADO_[acao]) {
       try { var db2 = novoDb_(); db2.travar = travar; r.estado = CORE.handle(db2, 'carregar', payload); } catch (e) {}
     }
