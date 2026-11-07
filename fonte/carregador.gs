@@ -1,4 +1,4 @@
-// Lista de Material de Eventos — CARREGADOR
+// Gastrônomos: Material de Eventos — CARREGADOR
 // Cole este código no Código.gs UMA ÚNICA VEZ. Ele busca a versão mais nova do app
 // no GitHub (no máximo a cada 5 minutos). Os dados continuam na sua Planilha e no seu Drive.
 var FONTE = 'https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/';

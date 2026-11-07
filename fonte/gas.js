@@ -2,7 +2,7 @@
 
 function doGet() {
   return HtmlService.createHtmlOutput(APP_HTML)
-    .setTitle('Lista de Material de Eventos')
+    .setTitle('Gastrônomos: Material de Eventos')
     .setFaviconUrl('https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-64.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
