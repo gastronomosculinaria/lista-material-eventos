@@ -10,7 +10,11 @@ var CORE = (function () {
   var PACOTES = [
     { id: 'bebidas-agua-2026-11-07', grupo: 'Bebidas', subgrupo: 'Água', itens: ['Galão de água 20 l', 'Água mineral sem gás (lata)',
       'Água mineral com gás (lata)', 'Água mineral sem gás (1,5 l)', 'Água mineral com gás (1,5 l)', 'Água mineral sem gás (500 ml)',
-      'Água mineral com gás (500 ml)', 'Água mineral sem gás (em caixa)'] }
+      'Água mineral com gás (500 ml)', 'Água mineral sem gás (em caixa)'] },
+    { id: 'bebidas-cerveja-2026-11-07', grupo: 'Bebidas', subgrupo: 'Cerveja', itens: ['Cerveja Heineken', 'Cerveja Antarctica',
+      'Cerveja Brahma', 'Cerveja Original', 'Cerveja Spaten', 'Cerveja Amstel', 'Cerveja Zero (sem álcool)'] },
+    { id: 'bebidas-sucos-2026-11-07', grupo: 'Bebidas', subgrupo: 'Sucos', itens: ['Suco de uva', 'Suco de morango', 'Suco de laranja',
+      'Suco de abacaxi com hortelã'] }
   ];
   function aplicarPacotes(db) {
     var feitos = json(getConfig(db, 'pacotes'), []), mudou = false;
