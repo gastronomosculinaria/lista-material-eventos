@@ -311,7 +311,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 13 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 14 • Gastrônomos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
@@ -832,19 +832,20 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var e = evento(S.p.id);
     header('Retorno: ' + e.nome, true);
     var r = S.p.r || (S.p.r = {});
-    $('app').innerHTML = '<p class="sub">Conte o que voltou do evento. Se voltou menos do que saiu, explique o motivo.</p>' +
+    function consumo(id) { return (S.data.consumo || []).indexOf(grupoDoItem(id)) >= 0; }
+    $('app').innerHTML = '<p class="sub">Conte o que voltou do evento. Se voltou menos do que saiu, explique o motivo. Em ' + esc((S.data.consumo || []).join(', ')) + ' a explicação é opcional.</p>' +
       '<button class="btn block" id="tudo">Voltou tudo certo (preencher tudo)</button><div style="height:12px"></div>' +
       agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
-        var it = item(l.item_id) || { nome: l.nome };
+        var it = item(l.item_id) || { nome: l.nome }, cons = consumo(l.item_id);
         return '<div class="ret" id="r-' + l.item_id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(it.nome) + '</div><div class="qty">Saiu <b>' + l.qtd_saida + '</b></div></div>' +
           '<div><label class="hint" for="v-' + l.item_id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + l.item_id + '" data-v="' + l.item_id + '" style="width:84px;text-align:center"></div></div>' +
-          '<div data-j="' + l.item_id + '" hidden><label class="f" style="margin-top:0" for="j-' + l.item_id + '">Por que voltaram menos?</label><textarea id="j-' + l.item_id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
+          '<div data-j="' + l.item_id + '" hidden><label class="f" style="margin-top:0" for="j-' + l.item_id + '">' + (cons ? 'Observação (opcional)' : 'Por que voltaram menos?') + '</label><textarea id="j-' + l.item_id + '" placeholder="' + (cons ? 'Ex.: consumido no evento' : 'Ex.: 2 taças quebraram durante o serviço') + '"></textarea></div></div>';
       }, '<div class="list">', '</div>'); }).join('') + '<div id="erro" class="err" hidden></div>';
     function upd(id) {
       var l = e.linhas.filter(function (x) { return x.item_id === id; })[0];
       var v = $('v-' + id).value, falta = v !== '' && +v < l.qtd_saida;
       document.querySelector('[data-j="' + id + '"]').hidden = !falta;
-      $('r-' + id).classList.toggle('short', falta);
+      $('r-' + id).classList.toggle('short', falta && !consumo(id));
     }
     document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { upd(x.dataset.v); }; });
     $('tudo').onclick = function () { e.linhas.forEach(function (l) { $('v-' + l.item_id).value = l.qtd_saida; upd(l.item_id); }); };

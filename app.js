@@ -5,6 +5,8 @@ var CORE = (function () {
     'Equipamentos', 'Gás', 'Utensílios', 'Outros'];
   var SENHA_MASTER_INICIAL = 'trocar123';
   var GRUPOS = ['Material', 'Caixa de secos', 'Caixa de talher', 'Caixa de limpeza', 'Bebidas'];
+  // Grupos de consumo: se voltar menos, a justificativa é opcional (o que faltou foi consumido).
+  var CONSUMO = ['Caixa de limpeza', 'Bebidas', 'Caixa de secos'];
   var SUBGRUPOS = { Bebidas: ['Água', 'Refrigerantes', 'Cerveja', 'Sucos', 'Matte', 'Matte Zero', 'Matte Limão', 'Café', 'Chá', 'Leite'] };
   // Itens incluídos automaticamente uma única vez (pedidos pelo usuário).
   var PACOTES = [
@@ -168,7 +170,7 @@ var CORE = (function () {
               justificativa: l.justificativa };
           }) };
       });
-      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens) };
+      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO };
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
@@ -404,14 +406,16 @@ var CORE = (function () {
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
-      var resumo = [], faltas = [];
+      var resumo = [], faltas = [], todosItens = db.all('itens');
       linhas.forEach(function (l) {
+        var itl = porId(todosItens, l.item_id), consumo = itl && CONSUMO.indexOf(grupoDe(itl)) >= 0;
         var e = envio[l.item_id];
         if (!e || e.qtd === '' || e.qtd == null) falha('Informe quantos voltaram de "' + l.item_nome + '".');
         var q = Math.max(0, Math.round(num(e.qtd)));
         var saiu = num(l.qtd_saida);
         if (q > saiu) falha('"' + l.item_nome + '": voltaram mais (' + q + ') do que saíram (' + saiu + ').');
         var just = texto(e.justificativa, 500);
+        if (q < saiu && !just && consumo) just = 'Consumido no evento';
         if (q < saiu && !just) falha('Explique por que voltaram menos de "' + l.item_nome + '".');
         db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: q < saiu ? just : '' });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
