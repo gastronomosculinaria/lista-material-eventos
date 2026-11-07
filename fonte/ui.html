@@ -174,6 +174,23 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 (function () {
   var S = { who: null, token: null, data: null, view: 'inicio', p: {}, stack: [], erro: '', grp: 'Todos', q: '' };
   var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+  var REMOTO = !IS_GAS && typeof APP_URL === 'string' && APP_URL;
+  function remoto(acao, p) {
+    var txt = JSON.stringify(p), LIM = 6000;
+    function chamar(q) {
+      var u = APP_URL + '?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
+      return fetch(u, { credentials: 'omit', redirect: 'follow' }).then(function (r) { return r.json(); })
+        .catch(function () { throw new Error('Falha de conexão. Confira a internet e tente de novo.'); })
+        .then(function (r) { if (!r || !r.ok) throw new Error(r ? r.erro : 'Sem resposta do servidor.'); return r.data; });
+    }
+    if (encodeURIComponent(txt).length <= LIM) return chamar({ acao: acao, p: txt });
+    var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10), partes = [], i = 0, n = 0;
+    while (i < txt.length) { var t = 5800; while (encodeURIComponent(txt.slice(i, i + t)).length > LIM) t = Math.floor(t * 0.9); partes.push(txt.slice(i, i + t)); i += t; }
+    var prox = 0;
+    function trabalhador() { var k = prox++; if (k >= partes.length) return null; return chamar({ acao: '_parte', id: id, i: k, d: partes[k] }).then(trabalhador); }
+    var fila = []; for (var w = 0; w < 6; w++) fila.push(trabalhador());
+    return Promise.all(fila).then(function () { return chamar({ acao: acao, p: 'up:' + id + ':' + partes.length }); });
+  }
   var $ = function (id) { return document.getElementById(id); };
 
   function ls(k, v) {
@@ -188,6 +205,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   function api(acao, payload) {
     var p = Object.assign({ token: S.token, who: S.who }, payload || {});
+    if (REMOTO) return remoto(acao, p);
     if (IS_GAS) return new Promise(function (res, rej) {
       google.script.run.withSuccessHandler(function (r) { r && r.ok ? res(r.data) : rej(new Error(r ? r.erro : 'Sem resposta do servidor.')); })
         .withFailureHandler(function (e) { rej(new Error(e && e.message ? e.message : 'Falha de conexão. Tente de novo.')); }).api(acao, p);
@@ -247,7 +265,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<div><div class="tit">' + esc(titulo) + '</div><div class="lema">' + esc(MARCA.lema) + '</div></div></div>' +
       '<div class="foto" role="img" aria-label="Foto de um evento da Gastrônomos" style="background-image:url(' + foto + ')"></div></div>';
   }
-  function demoAviso() { return IS_GAS ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
+  function demoAviso() { return IS_GAS || REMOTO ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
 
   // ---------- telas ----------
   var V = {};
@@ -477,7 +495,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     ligarSub('gr', 'sg');
     $('fo').onchange = function () {
       var f = this.files[0]; if (!f) return;
-      comprimir(f, IS_GAS ? 1000 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
+      comprimir(f, IS_GAS || REMOTO ? 1000 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
         .catch(function (e) { S.erro = e.message; mostrarErro(); });
     };
     $('cn').onclick = voltar;

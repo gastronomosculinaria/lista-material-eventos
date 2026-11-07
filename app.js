@@ -514,7 +514,8 @@ var CORE = (function () {
 
 // ---- Google Apps Script: dados na Planilha, fotos no Google Drive ----
 
-function doGetApp_() {
+function doGetApp_(e) {
+  if (e && e.parameter && e.parameter.acao) return apiRemoto_(e.parameter);
   var out = HtmlService.createHtmlOutput(APP_HTML)
     .setTitle('Gastrônomos: Material de Eventos')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -708,4 +709,36 @@ function agenda_(agendaLida) {
       });
     }
   };
+}
+
+// ---- Acesso pela página de entrada (GitHub Pages): mesmas ações, via GET anônimo ----
+// Assim o app abre mesmo em celulares com várias contas Google conectadas.
+// Pedidos grandes (fotos, listas longas) chegam em partes guardadas no cache por 10 minutos.
+function apiRemoto_(q) {
+  var r;
+  try {
+    var cache = CacheService.getScriptCache();
+    if (q.acao === '_parte') {
+      if (!/^[\w-]{8,40}$/.test(q.id || '') || !/^\d{1,3}$/.test(q.i || '')) throw new Error('Parte inválida.');
+      cache.put('up_' + q.id + '_' + q.i, String(q.d || ''), 600);
+      r = { ok: true, data: null };
+    } else {
+      var txt = q.p || '{}', m = /^up:([\w-]{8,40}):(\d{1,3})$/.exec(txt);
+      if (m) {
+        var chaves = [];
+        for (var i = 0; i < +m[2]; i++) chaves.push('up_' + m[1] + '_' + i);
+        var got = cache.getAll(chaves); txt = '';
+        for (var j = 0; j < chaves.length; j++) {
+          if (got[chaves[j]] == null) throw new Error('A conexão falhou no meio do envio. Tente de novo.');
+          txt += got[chaves[j]];
+        }
+        cache.removeAll(chaves);
+      }
+      var fn = typeof apiApp_ === 'function' ? apiApp_ : api;
+      r = fn(q.acao, JSON.parse(txt));
+    }
+  } catch (e) {
+    r = { ok: false, erro: e && e.message ? e.message : String(e) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(r)).setMimeType(ContentService.MimeType.JSON);
 }

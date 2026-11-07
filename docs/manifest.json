@@ -1,0 +1,20 @@
+{
+ "name": "Gastrônomos: Material de Eventos",
+ "short_name": "Material de Eventos",
+ "start_url": ".",
+ "display": "standalone",
+ "background_color": "#fbf7ee",
+ "theme_color": "#c0615e",
+ "icons": [
+  {
+   "src": "https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-180.png",
+   "sizes": "180x180",
+   "type": "image/png"
+  },
+  {
+   "src": "https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}

@@ -1,11 +1,19 @@
 import os
 d=os.path.dirname(os.path.abspath(__file__)); src=lambda f: open(os.path.join(d,'src',f),encoding='utf-8').read()
 ui=src('ui.html')
+import base64
+MARCA_URL='https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/'
+def marca_dados(t):
+    import re
+    def f(m):
+        n=m.group(1); b=open(os.path.join(d,'src','marca',n),'rb').read()
+        return 'data:image/'+('png' if n.endswith('.png') else 'jpeg')+';base64,'+base64.b64encode(b).decode()
+    return re.sub(r'__MARCA__/([\w.-]+)', f, t)
 # demo (artifact): núcleo + banco local embutidos
-demo=ui.replace('/*__BACKEND__*/', src('core.js')+'\n'+src('demo.js'))
+demo=marca_dados(ui).replace('/*__BACKEND__*/', src('core.js')+'\n'+src('demo.js'))
 open(os.path.join(d,'dist','demo.html'),'w',encoding='utf-8').write(demo)
 # Google Apps Script
-gas_ui=ui.replace('/*__BACKEND__*/','')
+gas_ui=ui.replace('__MARCA__/',MARCA_URL).replace('/*__BACKEND__*/','')
 idx='<!DOCTYPE html>\n<html lang="pt-BR"><head><base target="_top"><meta charset="utf-8"></head><body>\n'+gas_ui+'\n</body></html>\n'
 open(os.path.join(d,'dist','index.html'),'w',encoding='utf-8').write(idx)
 import json
@@ -16,7 +24,7 @@ ip=os.path.join(d,'dist','instalar.html')
 if os.path.exists(ip):
     import re
     pg=open(ip,encoding='utf-8').read()
-    code=open(os.path.join(d,'dist','Code.gs'),encoding='utf-8').read()
+    code=src('carregador.gs')
     i=pg.index('var C1='); k=pg.index(';\ndocument.getElementById(\'t1\')')
     pg=pg[:i]+'var C1='+json.dumps(code).replace('</','<\\/')+pg[k:]
     open(ip,'w',encoding='utf-8').write(pg)
@@ -30,3 +38,20 @@ open(os.path.join(gh,'index.html'),'w',encoding='utf-8').write(idx)
 open(os.path.join(gh,'carregador.gs'),'w',encoding='utf-8').write(src('carregador.gs'))
 open(os.path.join(gh,'README.md'),'w',encoding='utf-8').write('# Lista de Material de Eventos\n\nCódigo do app de inventário do buffet (Google Apps Script). O `carregador.gs` fica no Código.gs da planilha e busca `app.js` e `index.html` deste repositório.\n')
 print('github ok')
+import shutil
+shutil.copytree(os.path.join(d,'src','marca'), os.path.join(gh,'marca'), dirs_exist_ok=True)
+print('marca ok')
+# página de entrada (GitHub Pages, pasta docs): mesma tela, falando com o Apps Script por GET anônimo
+APP_URL='https://script.google.com/macros/s/AKfycbwZW3gjh0DDKsw284u6aDeBwsSodsLRLK2kJm__UhfPVogYgzGnpVj93IBfTCcBgh4C5w/exec'
+dc=os.path.join(gh,'docs'); os.makedirs(dc, exist_ok=True)
+head=('<!DOCTYPE html>\n<html lang="pt-BR"><head><meta charset="utf-8">'
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+  '<meta name="theme-color" content="#c0615e"><meta name="apple-mobile-web-app-title" content="Material de Eventos">'
+  '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
+  '<link rel="icon" href="'+MARCA_URL+'icone-64.png"><link rel="apple-touch-icon" href="'+MARCA_URL+'icone-180.png">'
+  '<link rel="manifest" href="manifest.json"></head><body>\n')
+pg=ui.replace('__MARCA__/',MARCA_URL).replace('/*__BACKEND__*/','var APP_URL = '+json.dumps(APP_URL)+';')
+open(os.path.join(dc,'index.html'),'w',encoding='utf-8').write(head+pg+'\n</body></html>\n')
+open(os.path.join(dc,'manifest.json'),'w',encoding='utf-8').write(json.dumps({'name':'Gastrônomos: Material de Eventos','short_name':'Material de Eventos','start_url':'.','display':'standalone','background_color':'#fbf7ee','theme_color':'#c0615e','icons':[{'src':MARCA_URL+'icone-180.png','sizes':'180x180','type':'image/png'},{'src':MARCA_URL+'icone-512.png','sizes':'512x512','type':'image/png'}]},ensure_ascii=False,indent=1))
+open(os.path.join(dc,'.nojekyll'),'w').write('')
+print('docs ok')
