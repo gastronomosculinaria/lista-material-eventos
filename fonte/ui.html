@@ -1,35 +1,38 @@
 <title>Lista de Material de Eventos</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: uma coluna estreita como app de celular; cabeçalho fixo, botões grandes, barra de ação no rodapé. */
 :root {
-  --bg: #f3f4f1; --surface: #ffffff; --ink: #1d2422; --muted: #5f6a66; --line: #dde1dc;
-  --wine: #23695f; --wine-ink: #ffffff; --wine-soft: #e2f3ef; --mint: #98d8cd; --hero-ink: #ffffff;
-  --ok: #1f7a4d; --ok-soft: #e2f3ea; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #b3261e; --bad-soft: #fbe5e3;
-  --info: #24589c; --info-soft: #e3ecf8;
-  --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
-  --body: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Cores do manual da marca Gastrônomos: terracota #C0615E, verde água #98D8CD, oliva #736F5A, amarelo #F3E197 */
+  --bg: #fbf7ee; --surface: #ffffff; --ink: #2b2820; --muted: #66614f; --line: #e8e0cd;
+  --terra: #c0615e; --sun: #f3e197; --oliva: #736f5a;
+  --wine: #a64e4b; --wine-ink: #ffffff; --wine-soft: #f8e7e4; --mint: #98d8cd; --hero-ink: #ffffff;
+  --ok: #2f7a5c; --ok-soft: #e1f3ee; --warn: #8a6100; --warn-soft: #fbf1cf; --bad: #b3261e; --bad-soft: #fbe5e3;
+  --info: #3d6f8a; --info-soft: #e3f0f4;
+  --display: "Libre Baskerville", Georgia, "Times New Roman", serif;
+  --body: "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --r: 14px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
-  --wine: #98d8cd; --wine-ink: #0d2420; --wine-soft: #17302c; --mint: #98d8cd; --hero-ink: #ffffff;
-  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
-  --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark } }
+  --bg: #1b1915; --surface: #25221c; --ink: #f3eee2; --muted: #b5ae9a; --line: #3a362c;
+  --wine: #e6a29e; --wine-ink: #2b1514; --wine-soft: #3b2724; --mint: #98d8cd; --hero-ink: #ffffff;
+  --ok: #7fd6b8; --ok-soft: #1a3029; --warn: #f0cf6a; --warn-soft: #39301a; --bad: #ff8a80; --bad-soft: #3d1d1b;
+  --info: #9cc9dd; --info-soft: #1c2c33; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
-  --wine: #98d8cd; --wine-ink: #0d2420; --wine-soft: #17302c; --mint: #98d8cd; --hero-ink: #ffffff;
-  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
-  --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark }
+  --bg: #1b1915; --surface: #25221c; --ink: #f3eee2; --muted: #b5ae9a; --line: #3a362c;
+  --wine: #e6a29e; --wine-ink: #2b1514; --wine-soft: #3b2724; --mint: #98d8cd; --hero-ink: #ffffff;
+  --ok: #7fd6b8; --ok-soft: #1a3029; --warn: #f0cf6a; --warn-soft: #39301a; --bad: #ff8a80; --bad-soft: #3d1d1b;
+  --info: #9cc9dd; --info-soft: #1c2c33; color-scheme: dark }
 * { box-sizing: border-box }
 html, body { background: var(--bg); color: var(--ink) }
 body { font-family: var(--body); font-size: 16px; line-height: 1.45; -webkit-text-size-adjust: 100% }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface) }
 button, input, select, textarea { font: inherit; color: inherit }
+a { color: var(--wine) }
 .wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 120px }
-header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line) }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 3px solid var(--terra) }
 header.top .in { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 10px; min-height: 58px;
   padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 header.top h1 { font-family: var(--display); font-size: 20px; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
@@ -45,13 +48,13 @@ p.sub { color: var(--muted); margin: 4px 0 14px }
 .tile:hover { border-color: var(--wine) }
 .tile b { font-size: 18px; font-family: var(--display) }
 .tile span { color: var(--muted); font-size: 14px }
-.hero { position: relative; border-radius: 18px; overflow: hidden; min-height: 170px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 18px;
-  color: var(--hero-ink); background: #1f3f3a center / cover no-repeat; background-image: linear-gradient(180deg, rgb(10 30 27 / .15), rgb(10 30 27 / .78)), var(--hero-img, none); margin-bottom: 16px }
-.hero .marca { display: flex; align-items: center; gap: 10px }
-.hero .marca img { height: 46px; width: auto; max-width: 60%; object-fit: contain }
-.hero .marca b { font-family: var(--display); font-size: 22px; letter-spacing: .01em }
-.hero .lema { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--mint) }
-.hero .tit { font-family: var(--display); font-size: 26px; line-height: 1.15; text-wrap: balance }
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); background: var(--terra); color: var(--hero-ink); border-radius: 22px; overflow: hidden; min-height: 200px; margin-bottom: 16px }
+.hero .lado { padding: 18px 14px 16px 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-width: 0 }
+.hero .logo { height: 112px; width: auto; max-width: 100%; object-fit: contain; object-position: left; align-self: flex-start }
+.hero .tit { font-family: var(--display); font-style: italic; font-size: 19px; line-height: 1.25; text-wrap: balance; color: #fff }
+.hero .lema { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin-top: 4px }
+.hero .foto { margin: 12px 12px 12px 0; background: var(--oliva) center / cover no-repeat; border-radius: 58% 42% 52% 48% / 44% 54% 46% 56% }
+h1, h2, h3, .tile b, .zona .zh b { font-style: italic; font-weight: 400 }
 .tile .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--wine) }
 .tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none }
@@ -71,7 +74,7 @@ textarea { min-height: 80px }
 .search { position: sticky; top: calc(58px + env(safe-area-inset-top, 0px)); z-index: 4; background: var(--bg); padding-block: 8px; margin-top: -8px }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: none }
 .chip { flex: none; border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; white-space: nowrap }
-.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.chip.on { background: var(--wine); color: var(--wine-ink); border-color: var(--wine) }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 8px }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; cursor: pointer; text-align: left; padding: 0; display: flex; flex-direction: column }
 .card .ph { aspect-ratio: 4 / 3; max-width: 100% }
@@ -147,13 +150,14 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 @media print {
   body > *:not(#print) { display: none !important }
   #print { display: block !important; color: #000; background: #fff; font: 10.5pt/1.3 var(--body) }
-  #print h1 { font-size: 15pt; margin: 0 0 2px } #print .info { font-size: 9.5pt; margin-bottom: 8px }
+  #print h1 { font-family: var(--display); font-size: 15pt; margin: 0 0 2px } #print .info { font-size: 9.5pt; margin-bottom: 8px }
   #print h2 { font-size: 11.5pt; margin: 10px 0 4px; border-bottom: 1px solid #000; padding-bottom: 2px; break-after: avoid }
   #print h3 { font-size: 10pt; margin: 6px 0 2px; text-transform: uppercase; letter-spacing: .04em }
   #print ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18px }
   #print li { break-inside: avoid; padding: 1.5px 0; display: flex; gap: 6px }
   #print li span.q { min-width: 28px; text-align: right; font-weight: 700 } #print li span.v { margin-left: auto; color: #444 }
   #print .ass { margin-top: 14px; font-size: 9.5pt }
+  #print .plogo { float: right; height: 58px; margin: 0 0 4px 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact }
   @page { margin: 12mm }
 }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: up .2s ease-out } @keyframes up { from { opacity: 0; transform: translate(-50%, 8px) } } }
@@ -236,12 +240,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (podeVoltar) $('bk').onclick = voltar;
   }
   function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
-  var MARCA = { nome: 'Gastrônomos Culinária', lema: 'Arte na Gastronomia', logo: '',
-    foto: 'https://gastronomosculinaria.com.br/wp-content/uploads/2019/07/gastronomos-slider-1.jpg' };
-  function hero(titulo) {
-    return '<div class="hero" style="--hero-img:url(' + MARCA.foto + ')"><div class="marca">' +
-      (MARCA.logo ? '<img src="' + esc(MARCA.logo) + '" alt="' + esc(MARCA.nome) + '">' : '<b>' + esc(MARCA.nome) + '</b>') + '</div>' +
-      '<div class="lema">' + esc(MARCA.lema) + '</div><div class="tit">' + esc(titulo) + '</div></div>';
+  var MARCA = { nome: 'Gastrônomos Culinária', lema: 'Arte na Gastronomia', logo: '__MARCA__/logo-amarelo.png',
+    fotos: { ident: '__MARCA__/foto-canape.jpg', inicio: '__MARCA__/foto-bebidas.jpg' } };
+  function hero(titulo, foto) {
+    return '<div class="hero"><div class="lado"><img class="logo" src="' + MARCA.logo + '" alt="' + esc(MARCA.nome) + '">' +
+      '<div><div class="tit">' + esc(titulo) + '</div><div class="lema">' + esc(MARCA.lema) + '</div></div></div>' +
+      '<div class="foto" role="img" aria-label="Foto de um evento da Gastrônomos" style="background-image:url(' + foto + ')"></div></div>';
   }
   function demoAviso() { return IS_GAS ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
 
@@ -251,7 +255,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.ident = function () {
     header('Lista de Material de Eventos');
     bar('');
-    $('app').innerHTML = demoAviso() + hero('Lista de Material de Eventos') +
+    $('app').innerHTML = demoAviso() + hero('Lista de Material de Eventos', MARCA.fotos.ident) +
       '<h2>Quem está usando?</h2><p class="sub">Seu nome e telefone ficam registrados em tudo que você fizer no app.</p>' +
       '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
@@ -270,7 +274,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar('');
     var ativos = d.eventos.filter(function (e) { return e.status !== 'concluido'; });
     var meus = d.eventos.filter(function (e) { return e.status === 'em_evento' && souPrestador(e); });
-    var h = demoAviso() + hero('Olá, ' + S.who.nome.split(' ')[0]);
+    var h = demoAviso() + hero('Olá, ' + S.who.nome.split(' ')[0], MARCA.fotos.inicio);
     if (meus.length) h += '<div class="list" style="margin-bottom:14px">' + meus.map(function (e) {
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">Registrar retorno: ' + esc(e.nome) + '</div><div class="hint">Você está na lista deste evento</div></div><span class="pill em_evento">No evento</span></button>';
     }).join('') + '</div>';
@@ -286,7 +290,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 7 • marca</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 8 • Gastrônomos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
@@ -728,7 +732,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var info = dataBR(e.data) + (e.hora_inicio ? ' · ' + e.hora_inicio + (e.hora_fim ? '–' + e.hora_fim : '') : '') + (e.local ? ' · ' + e.local : '');
       var pr = e.prestadores.map(function (p) { return p.nome; }).join(', ');
       var el = $('print') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'print' }));
-      el.innerHTML = '<h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(STATUS[e.status]) + '</div>' +
+      el.innerHTML = '<img class="plogo" src="__MARCA__/logo-terracota.png" alt=""><h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(STATUS[e.status]) + '</div>' +
         gEv.map(function (g) {
           return '<h2>' + esc(g[0]) + '</h2>' + porSub(g[0], g[1], itemDaLinha, function (l) {
             return '<li><span>☐</span><span class="q">' + l.qtd_saida + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
