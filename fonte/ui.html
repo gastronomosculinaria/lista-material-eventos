@@ -6,7 +6,7 @@
 /* Layout: uma coluna estreita como app de celular; cabeçalho fixo, botões grandes, barra de ação no rodapé. */
 :root {
   --bg: #f3f4f1; --surface: #ffffff; --ink: #1d2422; --muted: #5f6a66; --line: #dde1dc;
-  --wine: #7a1f35; --wine-ink: #ffffff; --wine-soft: #f5e6ea;
+  --wine: #23695f; --wine-ink: #ffffff; --wine-soft: #e2f3ef; --mint: #98d8cd; --hero-ink: #ffffff;
   --ok: #1f7a4d; --ok-soft: #e2f3ea; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #b3261e; --bad-soft: #fbe5e3;
   --info: #24589c; --info-soft: #e3ecf8;
   --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
@@ -15,12 +15,12 @@
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
-  --wine: #e07a93; --wine-ink: #1b0b10; --wine-soft: #3a1f27;
+  --wine: #98d8cd; --wine-ink: #0d2420; --wine-soft: #17302c; --mint: #98d8cd; --hero-ink: #ffffff;
   --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
   --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #141816; --surface: #1d2321; --ink: #eef1ee; --muted: #a3aea9; --line: #323a37;
-  --wine: #e07a93; --wine-ink: #1b0b10; --wine-soft: #3a1f27;
+  --wine: #98d8cd; --wine-ink: #0d2420; --wine-soft: #17302c; --mint: #98d8cd; --hero-ink: #ffffff;
   --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0bd5c; --warn-soft: #3a2e14; --bad: #ff8a80; --bad-soft: #3d1d1b;
   --info: #8db8f2; --info-soft: #1b2a3f; color-scheme: dark }
 * { box-sizing: border-box }
@@ -45,6 +45,13 @@ p.sub { color: var(--muted); margin: 4px 0 14px }
 .tile:hover { border-color: var(--wine) }
 .tile b { font-size: 18px; font-family: var(--display) }
 .tile span { color: var(--muted); font-size: 14px }
+.hero { position: relative; border-radius: 18px; overflow: hidden; min-height: 170px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 18px;
+  color: var(--hero-ink); background: #1f3f3a center / cover no-repeat; background-image: linear-gradient(180deg, rgb(10 30 27 / .15), rgb(10 30 27 / .78)), var(--hero-img, none); margin-bottom: 16px }
+.hero .marca { display: flex; align-items: center; gap: 10px }
+.hero .marca img { height: 46px; width: auto; max-width: 60%; object-fit: contain }
+.hero .marca b { font-family: var(--display); font-size: 22px; letter-spacing: .01em }
+.hero .lema { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--mint) }
+.hero .tit { font-family: var(--display); font-size: 26px; line-height: 1.15; text-wrap: balance }
 .tile .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--wine) }
 .tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none }
@@ -229,6 +236,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (podeVoltar) $('bk').onclick = voltar;
   }
   function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
+  var MARCA = { nome: 'Gastrônomos Culinária', lema: 'Arte na Gastronomia', logo: '',
+    foto: 'https://gastronomosculinaria.com.br/wp-content/uploads/2019/07/gastronomos-slider-1.jpg' };
+  function hero(titulo) {
+    return '<div class="hero" style="--hero-img:url(' + MARCA.foto + ')"><div class="marca">' +
+      (MARCA.logo ? '<img src="' + esc(MARCA.logo) + '" alt="' + esc(MARCA.nome) + '">' : '<b>' + esc(MARCA.nome) + '</b>') + '</div>' +
+      '<div class="lema">' + esc(MARCA.lema) + '</div><div class="tit">' + esc(titulo) + '</div></div>';
+  }
   function demoAviso() { return IS_GAS ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
 
   // ---------- telas ----------
@@ -237,7 +251,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.ident = function () {
     header('Lista de Material de Eventos');
     bar('');
-    $('app').innerHTML = demoAviso() +
+    $('app').innerHTML = demoAviso() + hero('Lista de Material de Eventos') +
       '<h2>Quem está usando?</h2><p class="sub">Seu nome e telefone ficam registrados em tudo que você fizer no app.</p>' +
       '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
@@ -256,7 +270,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar('');
     var ativos = d.eventos.filter(function (e) { return e.status !== 'concluido'; });
     var meus = d.eventos.filter(function (e) { return e.status === 'em_evento' && souPrestador(e); });
-    var h = demoAviso() + '<h2>Olá, ' + esc(S.who.nome.split(' ')[0]) + '</h2>';
+    var h = demoAviso() + hero('Olá, ' + S.who.nome.split(' ')[0]);
     if (meus.length) h += '<div class="list" style="margin-bottom:14px">' + meus.map(function (e) {
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">Registrar retorno: ' + esc(e.nome) + '</div><div class="hint">Você está na lista deste evento</div></div><span class="pill em_evento">No evento</span></button>';
     }).join('') + '</div>';
@@ -272,7 +286,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 6 • subtítulos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 7 • marca</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
