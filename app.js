@@ -24,6 +24,8 @@ var CORE = (function () {
   ];
   function aplicarPacotes(db) {
     var feitos = json(getConfig(db, 'pacotes'), []), mudou = false;
+    if (PACOTES.every(function (pc) { return feitos.indexOf(pc.id) >= 0; })) return;
+    if (db.travar) { db.travar(); if (db.esquecer) db.esquecer('config'); feitos = json(getConfig(db, 'pacotes'), []); }
     PACOTES.forEach(function (pc) {
       if (feitos.indexOf(pc.id) >= 0) return;
       var existentes = {};
@@ -540,16 +542,26 @@ function configurarApp_() {
   return 'Pronto. Agora publique: Implantar > Nova implantação > App da Web.';
 }
 
+// Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
+// (estado), poupando uma segunda ida ao servidor.
+var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1 };
 function apiApp_(acao, payload) {
-  var lock = LockService.getScriptLock();
+  var lock = LockService.getScriptLock(), travado = false;
+  function travar() { if (!travado) { lock.waitLock(20000); travado = true; } }
   try {
-    lock.waitLock(20000);
-    var db = novoDb_();
-    return { ok: true, data: CORE.handle(db, acao, payload) };
+    var leitura = !!LEITURAS_[acao];
+    if (!leitura) travar();
+    var db = novoDb_(); db.travar = travar;
+    var r = { ok: true, data: CORE.handle(db, acao, payload) };
+    if (!leitura && !SEM_ESTADO_[acao]) {
+      try { var db2 = novoDb_(); db2.travar = travar; r.estado = CORE.handle(db2, 'carregar', payload); } catch (e) {}
+    }
+    return r;
   } catch (e) {
     return { ok: false, erro: e && e.message ? e.message : String(e) };
   } finally {
-    try { lock.releaseLock(); } catch (e) {}
+    if (travado) try { lock.releaseLock(); } catch (e) {}
   }
 }
 
@@ -596,6 +608,7 @@ function novoDb_() {
   function linhaDe(t, o) { return CORE.TABELAS[t].map(function (c) { return o[c] == null ? '' : String(o[c]); }); }
   return {
     all: function (t) { return ler(t); },
+    esquecer: function (t) { delete cache[t]; },
     insert: function (t, o) {
       var sh = aba(t);
       sh.appendRow(linhaDe(t, o));

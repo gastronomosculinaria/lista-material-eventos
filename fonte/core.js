@@ -24,6 +24,8 @@ var CORE = (function () {
   ];
   function aplicarPacotes(db) {
     var feitos = json(getConfig(db, 'pacotes'), []), mudou = false;
+    if (PACOTES.every(function (pc) { return feitos.indexOf(pc.id) >= 0; })) return;
+    if (db.travar) { db.travar(); if (db.esquecer) db.esquecer('config'); feitos = json(getConfig(db, 'pacotes'), []); }
     PACOTES.forEach(function (pc) {
       if (feitos.indexOf(pc.id) >= 0) return;
       var existentes = {};

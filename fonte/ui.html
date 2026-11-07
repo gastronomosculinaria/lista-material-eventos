@@ -181,7 +181,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var u = APP_URL + '?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
       return fetch(u, { credentials: 'omit', redirect: 'follow' }).then(function (r) { return r.json(); })
         .catch(function () { throw new Error('Falha de conexão. Confira a internet e tente de novo.'); })
-        .then(function (r) { if (!r || !r.ok) throw new Error(r ? r.erro : 'Sem resposta do servidor.'); return r.data; });
+        .then(function (r) { if (!r || !r.ok) throw new Error(r ? r.erro : 'Sem resposta do servidor.'); if (r.estado) S.estado = r.estado; return r.data; });
     }
     if (encodeURIComponent(txt).length <= LIM) return chamar({ acao: acao, p: txt });
     var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10), partes = [], i = 0, n = 0;
@@ -207,7 +207,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var p = Object.assign({ token: S.token, who: S.who }, payload || {});
     if (REMOTO) return remoto(acao, p);
     if (IS_GAS) return new Promise(function (res, rej) {
-      google.script.run.withSuccessHandler(function (r) { r && r.ok ? res(r.data) : rej(new Error(r ? r.erro : 'Sem resposta do servidor.')); })
+      google.script.run.withSuccessHandler(function (r) { if (r && r.ok && r.estado) S.estado = r.estado; r && r.ok ? res(r.data) : rej(new Error(r ? r.erro : 'Sem resposta do servidor.')); })
         .withFailureHandler(function (e) { rej(new Error(e && e.message ? e.message : 'Falha de conexão. Tente de novo.')); }).api(acao, p);
     });
     return new Promise(function (res, rej) {
@@ -219,7 +219,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     setTimeout(function () { t.remove(); }, 2600);
   }
   function recarregar() {
-    return api('carregar').then(function (d) {
+    var pronto = S.estado; S.estado = null;
+    return (pronto ? Promise.resolve(pronto) : api('carregar')).then(function (d) {
       S.data = d;
       if (S.token && !d.sessao) { S.token = null; ls('token', null); }
     });
@@ -233,7 +234,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function inicio() { S.stack = []; S.view = 'inicio'; S.p = {}; render(); }
   function fazer(btn, promessa, ok) {
     if (btn) btn.disabled = true;
-    S.erro = '';
+    S.erro = ''; S.estado = null;
     return promessa.then(function (r) { return recarregar().then(function () { if (ok) ok(r); }); })
       .catch(function (e) { S.erro = e.message; if (btn) btn.disabled = false; mostrarErro(); });
   }
@@ -308,7 +309,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 12 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 13 • Gastrônomos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
