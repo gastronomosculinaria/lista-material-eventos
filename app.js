@@ -4,7 +4,38 @@ var CORE = (function () {
   var CATEGORIAS = ['Copos', 'Taças de vidro', 'Taças de cristal', 'Bandejas', 'Pratos', 'Talheres',
     'Equipamentos', 'Gás', 'Utensílios', 'Outros'];
   var SENHA_MASTER_INICIAL = 'trocar123';
-  var GRUPOS = ['Material', 'Caixa de secos', 'Caixa de talher'];
+  var GRUPOS = ['Material', 'Caixa de secos', 'Caixa de talher', 'Bebidas'];
+  var SUBGRUPOS = { Bebidas: ['Água', 'Refrigerantes', 'Cerveja', 'Sucos', 'Matte', 'Matte Zero', 'Matte Limão', 'Café', 'Chá', 'Leite'] };
+  // Itens incluídos automaticamente uma única vez (pedidos pelo usuário).
+  var PACOTES = [
+    { id: 'bebidas-agua-2026-11-07', grupo: 'Bebidas', subgrupo: 'Água', itens: ['Galão de água 20 l', 'Água mineral sem gás (lata)',
+      'Água mineral com gás (lata)', 'Água mineral sem gás (1,5 l)', 'Água mineral com gás (1,5 l)', 'Água mineral sem gás (500 ml)',
+      'Água mineral com gás (500 ml)', 'Água mineral sem gás (em caixa)'] }
+  ];
+  function aplicarPacotes(db) {
+    var feitos = json(getConfig(db, 'pacotes'), []), mudou = false;
+    PACOTES.forEach(function (pc) {
+      if (feitos.indexOf(pc.id) >= 0) return;
+      var existentes = {};
+      db.all('itens').forEach(function (i) { if (sim(i.ativo)) existentes[String(i.nome).trim().toLowerCase()] = true; });
+      var novos = pc.itens.filter(function (n) { return !existentes[n.toLowerCase()]; }).map(function (n) {
+        return { id: uid(), nome: n, categoria: pc.subgrupo, descricao: '', foto: '', grupo: pc.grupo, subgrupo: pc.subgrupo, qtd_total: '0', ativo: 'sim', criado_em: agora() };
+      });
+      if (novos.length) {
+        if (db.insertMany) db.insertMany('itens', novos); else novos.forEach(function (n) { db.insert('itens', n); });
+        log(db, { nome: 'Sistema', telefone: '' }, 'Incluiu itens sugeridos', pc.grupo + ' / ' + pc.subgrupo + ': ' + novos.map(function (n) { return n.nome; }).join(', '));
+      }
+      feitos.push(pc.id); mudou = true;
+    });
+    if (mudou) setConfig(db, 'pacotes', JSON.stringify(feitos));
+  }
+  function mapaSubgrupos(db, itens) {
+    var m = {}, extra = json(getConfig(db, 'subgrupos'), {});
+    Object.keys(SUBGRUPOS).forEach(function (g) { m[g] = SUBGRUPOS[g].slice(); });
+    Object.keys(extra).forEach(function (g) { m[g] = m[g] || []; extra[g].forEach(function (x) { if (m[g].indexOf(x) < 0) m[g].push(x); }); });
+    itens.forEach(function (i) { var g = grupoDe(i); if (i.subgrupo) { m[g] = m[g] || []; if (m[g].indexOf(i.subgrupo) < 0) m[g].push(i.subgrupo); } });
+    return m;
+  }
   function grupoDe(i) { return i.grupo || 'Material'; }
   function listaGrupos(db, itens) {
     var g = GRUPOS.slice();
@@ -106,10 +137,11 @@ var CORE = (function () {
     },
 
     carregar: function (db, p, s) {
+      aplicarPacotes(db);
       var res = reservas(db);
       var itens = db.all('itens').filter(function (i) { return sim(i.ativo); }).map(function (i) {
         var total = num(i.qtd_total);
-        return { id: i.id, nome: i.nome, categoria: i.categoria, descricao: i.descricao, foto: i.foto, grupo: grupoDe(i),
+        return { id: i.id, nome: i.nome, categoria: i.categoria, descricao: i.descricao, foto: i.foto, grupo: grupoDe(i), subgrupo: i.subgrupo || '',
           qtd_total: total, disponivel: total - (res[i.id] || 0) };
       });
       var linhas = db.all('evento_itens');
@@ -124,7 +156,7 @@ var CORE = (function () {
               justificativa: l.justificativa };
           }) };
       });
-      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens) };
+      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens) };
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
@@ -163,7 +195,7 @@ var CORE = (function () {
       var it = p.item || {};
       var nome = texto(it.nome, 120);
       if (!nome) falha('Dê um nome ao item.');
-      var dados = { nome: nome, categoria: texto(it.categoria, 60) || 'Outros', descricao: texto(it.descricao, 500), grupo: texto(it.grupo, 60) || 'Material',
+      var dados = { nome: nome, categoria: texto(it.categoria, 60) || 'Outros', descricao: texto(it.descricao, 500), grupo: texto(it.grupo, 60) || 'Material', subgrupo: texto(it.subgrupo, 60),
         qtd_total: String(Math.max(0, Math.round(num(it.qtd_total)))) };
       if (it.fotoNova) dados.foto = db.salvarFoto(it.fotoNova, nome);
       if (it.id) {
@@ -171,7 +203,7 @@ var CORE = (function () {
         if (!antes) falha('Item não encontrado.');
         db.update('itens', it.id, dados);
         var mud = [];
-        ['nome', 'grupo', 'categoria', 'descricao', 'qtd_total'].forEach(function (k) {
+        ['nome', 'grupo', 'subgrupo', 'categoria', 'descricao', 'qtd_total'].forEach(function (k) {
           if (String(antes[k]) !== String(dados[k])) mud.push(k + ': "' + antes[k] + '" → "' + dados[k] + '"');
         });
         if (dados.foto) mud.push('nova foto');
@@ -187,7 +219,7 @@ var CORE = (function () {
 
     salvarVarios: function (db, p, s, quem) {
       pedeInventario(s);
-      var grupo = texto(p.grupo, 60) || 'Material', cat = texto(p.categoria, 60) || 'Outros';
+      var grupo = texto(p.grupo, 60) || 'Material', cat = texto(p.categoria, 60) || 'Outros', sub = texto(p.subgrupo, 60);
       var existentes = {};
       db.all('itens').forEach(function (i) { if (sim(i.ativo)) existentes[String(i.nome).trim().toLowerCase()] = true; });
       var novos = [], repetidos = 0;
@@ -199,7 +231,7 @@ var CORE = (function () {
         if (existentes[k]) { repetidos++; return; }
         existentes[k] = true;
         var q = Math.max(0, Math.round(num(partes[1] || 0)));
-        novos.push({ id: uid(), nome: nome.charAt(0).toUpperCase() + nome.slice(1), categoria: cat, descricao: '', foto: '', grupo: grupo,
+        novos.push({ id: uid(), nome: nome.charAt(0).toUpperCase() + nome.slice(1), categoria: cat, descricao: '', foto: '', grupo: grupo, subgrupo: sub,
           qtd_total: String(q), ativo: 'sim', criado_em: agora() });
       });
       if (!novos.length) falha(repetidos ? 'Todos esses itens já estão cadastrados.' : 'Cole pelo menos um nome de item.');
@@ -211,21 +243,26 @@ var CORE = (function () {
 
     moverItens: function (db, p, s, quem) {
       pedeInventario(s);
-      var grupo = texto(p.grupo, 60);
+      var grupo = texto(p.grupo, 60), sub = texto(p.subgrupo, 60);
       if (!grupo) falha('Escolha o grupo.');
       var itens = db.all('itens'), nomes = [];
       (p.ids || []).forEach(function (id) {
         var it = porId(itens, id);
-        if (it && grupoDe(it) !== grupo) { db.update('itens', id, { grupo: grupo }); nomes.push(it.nome); }
+        if (it && (grupoDe(it) !== grupo || (it.subgrupo || '') !== sub)) { db.update('itens', id, { grupo: grupo, subgrupo: sub }); nomes.push(it.nome); }
       });
-      if (nomes.length) log(db, quem, 'Mudou itens de grupo', nomes.join(', ') + ' → ' + grupo);
+      if (nomes.length) log(db, quem, 'Mudou itens de grupo', nomes.join(', ') + ' → ' + grupo + (sub ? ' / ' + sub : ''));
       return true;
     },
 
     criarGrupo: function (db, p, s, quem) {
       pedeInventario(s);
-      var g = texto(p.grupo, 60);
+      var g = texto(p.grupo, 60), sub = texto(p.subgrupo, 60);
       if (!g) falha('Dê um nome ao grupo.');
+      if (sub) {
+        var mapa = json(getConfig(db, 'subgrupos'), {});
+        mapa[g] = mapa[g] || [];
+        if (mapa[g].indexOf(sub) < 0 && (SUBGRUPOS[g] || []).indexOf(sub) < 0) { mapa[g].push(sub); setConfig(db, 'subgrupos', JSON.stringify(mapa)); log(db, quem, 'Criou subtítulo', g + ' / ' + sub); }
+      }
       var lista = json(getConfig(db, 'grupos'), []);
       if (lista.indexOf(g) < 0 && GRUPOS.indexOf(g) < 0) { lista.push(g); setConfig(db, 'grupos', JSON.stringify(lista)); log(db, quem, 'Criou grupo', g); }
       return true;
@@ -457,7 +494,7 @@ var CORE = (function () {
   }
 
   var TABELAS = {
-    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo'],
+    itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa'],

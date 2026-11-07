@@ -120,10 +120,14 @@ textarea { min-height: 80px }
 .loading { text-align: center; color: var(--muted); padding: 40px 0 }
 h3.grp { display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-size: 18px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--wine) }
 h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted) }
+h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--wine); margin: 14px 0 8px }
 .tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px }
 .tools .btn { min-height: 40px; padding: 0 14px; font-size: 14px }
-.zonas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start }
+.zonas { user-select: none; -webkit-user-select: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start }
 .zona { background: var(--surface); border: 2px dashed var(--line); border-radius: var(--r); padding: 10px; min-height: 90px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.subz { display: flex; flex-direction: column; gap: 6px; border-radius: 10px; padding: 2px; min-height: 8px }
+.subz[data-sub]:not([data-sub=""]) { border: 1px dashed var(--line); padding: 6px; min-height: 40px }
+.subz.alvo { outline: 2px solid var(--wine); background: var(--wine-soft) }
 .zona.alvo { border-color: var(--wine); background: var(--wine-soft) }
 .zona .zh { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; padding: 2px 2px 6px }
 .zona .zh b { font-family: var(--display); font-size: 17px }
@@ -140,6 +144,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
   #print { display: block !important; color: #000; background: #fff; font: 10.5pt/1.3 var(--body) }
   #print h1 { font-size: 15pt; margin: 0 0 2px } #print .info { font-size: 9.5pt; margin-bottom: 8px }
   #print h2 { font-size: 11.5pt; margin: 10px 0 4px; border-bottom: 1px solid #000; padding-bottom: 2px; break-after: avoid }
+  #print h3 { font-size: 10pt; margin: 6px 0 2px; text-transform: uppercase; letter-spacing: .04em }
   #print ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18px }
   #print li { break-inside: avoid; padding: 1.5px 0; display: flex; gap: 6px }
   #print li span.q { min-width: 28px; text-align: right; font-weight: 700 } #print li span.v { margin-left: auto; color: #444 }
@@ -269,7 +274,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 5 • grupos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 6 • subtítulos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
@@ -344,6 +349,21 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     $('q').oninput = function () { S.q = this.value; redesenhar(); };
     document.querySelectorAll('[data-grp]').forEach(function (b) { b.onclick = function () { S.grp = b.dataset.grp; render(); }; });
   }
+  function subsDe(g) { return (S.data.subgrupos || {})[g] || []; }
+  // Dentro de um grupo, separa por subtítulo: itens sem subtítulo primeiro, depois na ordem dos subtítulos.
+  function porSub(g, lista, fi, render, abre, fecha) {
+    var ordem = [''].concat(subsDe(g)), mapa = {};
+    lista.forEach(function (x) { var sb = (fi(x) || {}).subgrupo || ''; if (ordem.indexOf(sb) < 0) ordem.push(sb); (mapa[sb] = mapa[sb] || []).push(x); });
+    return ordem.filter(function (sb) { return mapa[sb]; }).map(function (sb) {
+      return (sb ? '<h4 class="sub">' + esc(sb) + '</h4>' : '') + (abre || '') + mapa[sb].map(render).join('') + (fecha || '');
+    }).join('');
+  }
+  function opcoesSub(g, atual) {
+    var l = subsDe(g);
+    return '<option value="">(sem subtítulo)</option>' + l.map(function (x) { return '<option' + (x === atual ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('');
+  }
+  function ligarSub(selG, selS) { $(selG).onchange = function () { $(selS).innerHTML = opcoesSub(this.value, ''); $(selS).parentNode.hidden = !subsDe(this.value).length; }; }
+  function itemDaLinha(l) { return item(l.item_id) || { nome: l.nome, subgrupo: '' }; }
   function cabGrupo(g, n, extra) { return '<h3 class="grp">' + esc(g) + (n != null ? ' <small>' + n + '</small>' : '') + (extra || '') + '</h3>'; }
 
   V.inventario = function () {
@@ -363,7 +383,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
           '<span class="hint">' + esc(i.categoria) + '</span><span class="qty"><b>' + i.disponivel + '</b> ' + (baixo ? 'livres de ' + i.qtd_total : 'no estoque') + '</span></div></button>';
       }
       $('lst').innerHTML = l.length ? agrupar(l, function (i) { return i.grupo; }).map(function (g) {
-        return (S.grp === 'Todos' ? cabGrupo(g[0], g[1].length) : '') + '<div class="grid">' + g[1].map(card).join('') + '</div>';
+        return (S.grp === 'Todos' ? cabGrupo(g[0], g[1].length) : '') + porSub(g[0], g[1], function (i) { return i; }, card, '<div class="grid">', '</div>');
       }).join('') : '<div class="empty">' + (S.data.itens.length ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado ainda.<br>Toque em “Cadastrar item” para incluir o primeiro.') + '</div>';
       document.querySelectorAll('[data-it]').forEach(function (b) { b.onclick = function () { detalheItem(b.dataset.it); }; });
     }
@@ -431,12 +451,14 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
       '<input type="file" id="fo" accept="image/*" hidden>' +
       '<label class="f" for="nm">Nome do item</label><input type="text" id="nm" value="' + esc(i.nome) + '" placeholder="Ex.: Bandeja espelhada retangular" required>' +
       '<label class="f" for="gr">Grupo na lista do evento</label><select id="gr">' + grupos().map(function (g) { return '<option' + (g === i.grupo ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>' +
+      '<div' + (subsDe(i.grupo).length ? '' : ' hidden') + '><label class="f" for="sg">Subtítulo</label><select id="sg">' + opcoesSub(i.grupo, i.subgrupo) + '</select></div>' +
       '<label class="f" for="ct">Tipo (opcional)</label><input type="text" id="ct" list="cats" value="' + esc(i.categoria === 'Outros' ? '' : i.categoria) + '" placeholder="Ex.: Bandejas, Taças, Copos">' +
       '<datalist id="cats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
       '<label class="f" for="qt">Quantidade total</label><input type="number" id="qt" min="0" inputmode="numeric" value="' + esc(i.qtd_total) + '" required>' +
       '<label class="f" for="ds">Observação (opcional)</label><textarea id="ds" placeholder="Ex.: estilo, tamanho, cor">' + esc(i.descricao) + '</textarea>' +
       '<div id="erro" class="err" hidden></div></form>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
+    ligarSub('gr', 'sg');
     $('fo').onchange = function () {
       var f = this.files[0]; if (!f) return;
       comprimir(f, IS_GAS ? 1000 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
@@ -444,7 +466,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     };
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, grupo: $('gr').value, categoria: $('ct').value, qtd_total: $('qt').value, descricao: $('ds').value, fotoNova: nova } }),
+      fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, grupo: $('gr').value, subgrupo: $('sg').value, categoria: $('ct').value, qtd_total: $('qt').value, descricao: $('ds').value, fotoNova: nova } }),
         function () { toast('Item salvo'); voltar(); });
     };
   };
@@ -454,12 +476,14 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     $('app').innerHTML = '<p class="sub">Cole os nomes, um por linha. Pode copiar uma coluna direto da planilha. Para já informar a quantidade, use “nome; quantidade”.</p>' +
       '<label class="f" for="tx">Itens</label><textarea id="tx" style="min-height:220px" placeholder="Taça de água; 120&#10;Taça de vinho tinto; 96&#10;Bandeja de espelho"></textarea>' +
       '<label class="f" for="gr">Grupo</label><select id="gr">' + grupos().map(function (g) { return '<option' + (g === S.grp ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>' +
+      '<div' + (subsDe(S.grp).length ? '' : ' hidden') + '><label class="f" for="sg">Subtítulo</label><select id="sg">' + opcoesSub(S.grp, '') + '</select></div>' +
       '<label class="f" for="ct">Tipo (opcional)</label><input type="text" id="ct" placeholder="Ex.: Bandejas">' +
       '<p class="hint">Itens que já existem com o mesmo nome são ignorados. As fotos você coloca depois, abrindo cada item.</p><div id="erro" class="err" hidden></div>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Cadastrar</button>');
+    ligarSub('gr', 'sg');
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarVarios', { texto: $('tx').value, grupo: $('gr').value, categoria: $('ct').value }), function (r) {
+      fazer(this, api('salvarVarios', { texto: $('tx').value, grupo: $('gr').value, subgrupo: $('sg').value, categoria: $('ct').value }), function (r) {
         toast(r.incluidos + ' itens cadastrados' + (r.repetidos ? ' (' + r.repetidos + ' já existiam)' : '')); voltar();
       });
     };
@@ -471,7 +495,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     var q = S.p.q || '';
     $('app').innerHTML = '<p class="sub">Arraste cada item pela alça ⠿ até o grupo certo. Ou toque em vários itens para marcar e depois em “Mover para cá”.</p>' +
       '<div class="row" style="margin-bottom:10px"><input type="text" id="gq" placeholder="Buscar item…" value="' + esc(q) + '" aria-label="Buscar item">' +
-      '<button class="btn" id="ng" style="flex:0 0 auto">+ Novo grupo</button></div><div id="ngf"></div><div class="zonas" id="zn"></div><div id="erro" class="err" hidden></div>';
+      '<button class="btn" id="ng" style="flex:0 0 auto">+ Grupo ou subtítulo</button></div><div id="ngf"></div><div class="zonas" id="zn"></div><div id="erro" class="err" hidden></div>';
     bar('');
     function nsel() { return Object.keys(sel).filter(function (k) { return sel[k]; }); }
     function desenhar() {
@@ -481,24 +505,34 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
           .sort(function (a, b) { return a.nome.localeCompare(b.nome); });
         return '<div class="zona" data-zona="' + esc(g) + '"><div class="zh"><b>' + esc(g) + ' <small class="hint">' + its.length + '</small></b>' +
           (n ? '<button class="btn" style="min-height:36px;font-size:14px" data-mv="' + esc(g) + '">Mover ' + n + ' para cá</button>' : '') + '</div>' +
-          (its.length ? its.map(function (i) {
-            return '<div class="arr' + (sel[i.id] ? ' sel' : '') + '" data-it="' + i.id + '"><span class="alca" data-alca="' + i.id + '" aria-label="Arrastar">⠿</span><div class="ph">' + foto(i) + '</div><span class="nm">' + esc(i.nome) + '</span></div>';
-          }).join('') : '<div class="hint" style="padding:10px;text-align:center">Solte itens aqui</div>') + '</div>';
+          (its.length || subsDe(g).length ? '' : '<div class="hint" style="padding:10px;text-align:center">Solte itens aqui</div>') +
+          [''].concat(subsDe(g)).map(function (sb) {
+            var d = its.filter(function (i) { return (i.subgrupo || '') === sb; });
+            if (!sb && !d.length) return '';
+            return '<div class="subz" data-zona="' + esc(g) + '" data-sub="' + esc(sb) + '">' +
+              (sb ? '<div class="zh"><span class="hint" style="font-weight:600;color:var(--wine)">' + esc(sb) + ' · ' + d.length + '</span>' +
+                (n ? '<button class="btn" style="min-height:32px;font-size:13px" data-mv="' + esc(g) + '" data-mvs="' + esc(sb) + '">Mover ' + n + ' para cá</button>' : '') + '</div>' : '') +
+              d.map(function (i) {
+                return '<div class="arr' + (sel[i.id] ? ' sel' : '') + '" data-it="' + i.id + '"><span class="alca" data-alca="' + i.id + '" aria-label="Arrastar">⠿</span><div class="ph">' + foto(i) + '</div><span class="nm">' + esc(i.nome) + '</span></div>';
+              }).join('') + '</div>';
+          }).join('') + '</div>';
       }).join('');
       document.querySelectorAll('.arr').forEach(function (el) {
         el.onclick = function (ev) { if (ev.target.closest('.alca')) return; sel[el.dataset.it] = !sel[el.dataset.it]; desenhar(); };
       });
-      document.querySelectorAll('[data-mv]').forEach(function (b) { b.onclick = function () { mover(nsel(), b.dataset.mv); }; });
+      document.querySelectorAll('[data-mv]').forEach(function (b) { b.onclick = function () { mover(nsel(), b.dataset.mv, b.dataset.mvs || ''); }; });
       document.querySelectorAll('[data-alca]').forEach(function (h) { h.onpointerdown = arrastar; });
     }
-    function mover(ids, g) {
-      ids = ids.filter(function (id) { var i = item(id); return i && i.grupo !== g; });
+    function mover(ids, g, sb) {
+      sb = sb || '';
+      ids = ids.filter(function (id) { var i = item(id); return i && (i.grupo !== g || (i.subgrupo || '') !== sb); });
       Object.keys(sel).forEach(function (k) { sel[k] = false; });
       if (!ids.length) { desenhar(); return; }
-      ids.forEach(function (id) { item(id).grupo = g; });
+      ids.forEach(function (id) { item(id).grupo = g; item(id).subgrupo = sb; });
       desenhar();
-      toast(ids.length === 1 ? 'Movido para ' + g : ids.length + ' itens movidos para ' + g);
-      api('moverItens', { ids: ids, grupo: g }).catch(function (e) { S.erro = e.message; mostrarErro(); recarregar().then(desenhar); });
+      var dest = g + (sb ? ' / ' + sb : '');
+      toast(ids.length === 1 ? 'Movido para ' + dest : ids.length + ' itens movidos para ' + dest);
+      api('moverItens', { ids: ids, grupo: g, subgrupo: sb }).catch(function (e) { S.erro = e.message; mostrarErro(); recarregar().then(desenhar); });
     }
     function arrastar(ev) {
       ev.preventDefault();
@@ -510,7 +544,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
       var alvo = null, rolar = 0, timer = setInterval(function () { if (rolar) window.scrollBy(0, rolar); }, 16);
       function pos(x, y) {
         f.style.left = (x - 20) + 'px'; f.style.top = (y - 20) + 'px';
-        var el = document.elementFromPoint(x, y), z = el && el.closest('[data-zona]');
+        var el = document.elementFromPoint(x, y), z = el && (el.closest('[data-sub]') || el.closest('[data-zona]'));
         if (alvo && alvo !== z) alvo.classList.remove('alvo');
         alvo = z; if (z) z.classList.add('alvo');
         var h = window.innerHeight; rolar = y < 70 ? -12 : y > h - 70 ? 12 : 0;
@@ -520,17 +554,19 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
       function up() {
         clearInterval(timer); document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
         f.remove();
-        if (alvo) { alvo.classList.remove('alvo'); mover(ids, alvo.dataset.zona); }
+        if (alvo) { alvo.classList.remove('alvo'); mover(ids, alvo.dataset.zona, alvo.dataset.sub || ''); }
       }
       document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
     }
     $('gq').oninput = function () { q = S.p.q = this.value; desenhar(); };
     $('ng').onclick = function () {
-      $('ngf').innerHTML = '<div class="row" style="margin-bottom:12px"><input type="text" id="ngn" placeholder="Ex.: Caixa de limpeza" aria-label="Nome do novo grupo"><button class="btn primary" id="ngok" style="flex:0 0 auto">Criar</button></div>';
+      $('ngf').innerHTML = '<div class="panel" style="margin-bottom:12px"><label class="f" style="margin-top:0" for="ngt">Criar</label><select id="ngt"><option value="">Um grupo novo</option>' +
+        grupos().map(function (g) { return '<option value="' + esc(g) + '">Um subtítulo dentro de ' + esc(g) + '</option>'; }).join('') + '</select>' +
+        '<label class="f" for="ngn">Nome</label><div class="row"><input type="text" id="ngn" placeholder="Ex.: Caixa de limpeza ou Refrigerantes"><button class="btn primary" id="ngok" style="flex:0 0 auto">Criar</button></div></div>';
       $('ngn').focus();
       $('ngok').onclick = function () {
-        var nome = $('ngn').value.trim();
-        fazer(this, api('criarGrupo', { grupo: nome }), function () { toast('Grupo criado'); render(); });
+        var nome = $('ngn').value.trim(), pai = $('ngt').value;
+        fazer(this, api('criarGrupo', pai ? { grupo: pai, subgrupo: nome } : { grupo: nome }), function () { toast(pai ? 'Subtítulo criado' : 'Grupo criado'); render(); });
       };
     };
     desenhar();
@@ -662,7 +698,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
     else h += gEv.filter(function (g) { return aba === 'Todos' || g[0] === aba; }).map(function (g) {
       var pc = g[1].reduce(function (t, l) { return t + l.qtd_saida; }, 0);
-      return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + '<div class="list">' + g[1].map(linhaEv).join('') + '</div>';
+      return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + porSub(g[0], g[1], itemDaLinha, linhaEv, '<div class="list">', '</div>');
     }).join('');
     if (e.status === 'em_evento' && !podeRet)
       h += '<p class="hint" style="margin-top:16px">Só os prestadores deste evento podem registrar o retorno. Seu telefone (' + esc(S.who.telefone) + ') não está na lista. Peça ao estoquista para incluir você.</p>';
@@ -682,15 +718,21 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
       var el = $('print') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'print' }));
       el.innerHTML = '<h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(STATUS[e.status]) + '</div>' +
         gEv.map(function (g) {
-          return '<h2>' + esc(g[0]) + '</h2><ul>' + g[1].map(function (l) {
+          return '<h2>' + esc(g[0]) + '</h2>' + porSub(g[0], g[1], itemDaLinha, function (l) {
             return '<li><span>☐</span><span class="q">' + l.qtd_saida + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
-          }).join('') + '</ul>';
+          }, '<ul>', '</ul>').replace(/<h4 class="sub">/g, '<h3>').replace(/<\/h4>/g, '</h3>');
         }).join('') + '<div class="ass">Separado por: ______________________ &nbsp;&nbsp; Conferido na volta por: ______________________</div>';
       try { window.print(); } catch (x) { toast('Use o menu do navegador para imprimir'); }
     };
     if ($('cop')) $('cop').onclick = function () {
       var t = '*' + e.nome + '*\n' + dataBR(e.data) + (e.hora_inicio ? ' ' + e.hora_inicio : '') + (e.local ? ' · ' + e.local : '') + '\n' +
-        gEv.map(function (g) { return '\n*' + g[0] + '*\n' + g[1].map(function (l) { return l.qtd_saida + ' × ' + nomeL(l); }).join('\n'); }).join('\n');
+        gEv.map(function (g) {
+          var ordem = [''].concat(subsDe(g[0])), mapa = {};
+          g[1].forEach(function (l) { var sb = itemDaLinha(l).subgrupo || ''; if (ordem.indexOf(sb) < 0) ordem.push(sb); (mapa[sb] = mapa[sb] || []).push(l); });
+          return '\n*' + g[0].toUpperCase() + '*' + ordem.filter(function (sb) { return mapa[sb]; }).map(function (sb) {
+            return (sb ? '\n_' + sb + '_' : '') + '\n' + mapa[sb].map(function (l) { return l.qtd_saida + ' × ' + nomeL(l); }).join('\n');
+          }).join('');
+        }).join('\n');
       function mostrar() {
         $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><h2>Lista em texto</h2><p class="hint">Selecione tudo e copie.</p><textarea id="ctx" style="min-height:260px">' + esc(t) + '</textarea><div style="height:10px"></div><button class="btn block" id="m-fc">Fechar</button></div></div>';
         $('m-fc').onclick = fecharModal; $('ctx').select();
@@ -727,7 +769,7 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
       }
       $('lst').innerHTML = l.length ? agrupar(l, function (i) { return i.grupo; }).map(function (g) {
         var sep = g[1].filter(function (i) { return qtd[i.id] > 0; }).length;
-        return (S.grp === 'Todos' ? cabGrupo(g[0], sep ? sep + ' separados' : null) : '') + g[1].map(linhaM).join('');
+        return (S.grp === 'Todos' ? cabGrupo(g[0], sep ? sep + ' separados' : null) : '') + porSub(g[0], g[1], function (i) { return i; }, linhaM);
       }).join('') : '<div class="empty">Nenhum item encontrado.</div>';
       function set(id, v) { var max = livre(item(id)); v = Math.max(0, Math.min(max, v || 0)); qtd[id] = v; document.querySelector('[data-q="' + id + '"]').value = v || ''; total(); if (v === max && max > 0) toast('Máximo disponível: ' + max); }
       document.querySelectorAll('[data-m]').forEach(function (b) { b.onclick = function () { set(b.dataset.m, (qtd[b.dataset.m] || 0) - 1); }; });
@@ -748,12 +790,12 @@ h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; colo
     var r = S.p.r || (S.p.r = {});
     $('app').innerHTML = '<p class="sub">Conte o que voltou do evento. Se voltou menos do que saiu, explique o motivo.</p>' +
       '<button class="btn block" id="tudo">Voltou tudo certo (preencher tudo)</button><div style="height:12px"></div>' +
-      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (l) {
+      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
         var it = item(l.item_id) || { nome: l.nome };
         return '<div class="ret" id="r-' + l.item_id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(it.nome) + '</div><div class="qty">Saiu <b>' + l.qtd_saida + '</b></div></div>' +
           '<div><label class="hint" for="v-' + l.item_id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + l.item_id + '" data-v="' + l.item_id + '" style="width:84px;text-align:center"></div></div>' +
           '<div data-j="' + l.item_id + '" hidden><label class="f" style="margin-top:0" for="j-' + l.item_id + '">Por que voltaram menos?</label><textarea id="j-' + l.item_id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
-      }).join('') + '</div>'; }).join('') + '<div id="erro" class="err" hidden></div>';
+      }, '<div class="list">', '</div>'); }).join('') + '<div id="erro" class="err" hidden></div>';
     function upd(id) {
       var l = e.linhas.filter(function (x) { return x.item_id === id; })[0];
       var v = $('v-' + id).value, falta = v !== '' && +v < l.qtd_saida;
