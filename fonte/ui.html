@@ -1,7 +1,7 @@
 <title>Gastrônomos: Material de Eventos</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Open+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: uma coluna estreita como app de celular; cabeçalho fixo, botões grandes, barra de ação no rodapé. */
 :root {
@@ -11,7 +11,7 @@
   --wine: #a64e4b; --wine-ink: #ffffff; --wine-soft: #f8e7e4; --mint: #98d8cd; --hero-ink: #ffffff;
   --ok: #2f7a5c; --ok-soft: #e1f3ee; --warn: #8a6100; --warn-soft: #fbf1cf; --bad: #b3261e; --bad-soft: #fbe5e3;
   --info: #3d6f8a; --info-soft: #e3f0f4;
-  --display: "Libre Baskerville", Georgia, "Times New Roman", serif;
+  --display: "Quicksand", "Open Sans", system-ui, sans-serif;
   --body: "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --r: 14px;
 }
@@ -51,10 +51,10 @@ p.sub { color: var(--muted); margin: 4px 0 14px }
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); background: var(--terra); color: var(--hero-ink); border-radius: 22px; overflow: hidden; min-height: 200px; margin-bottom: 16px }
 .hero .lado { padding: 18px 14px 16px 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-width: 0 }
 .hero .logo { height: 112px; width: auto; max-width: 100%; object-fit: contain; object-position: left; align-self: flex-start }
-.hero .tit { font-family: var(--display); font-style: italic; font-size: 19px; line-height: 1.25; text-wrap: balance; color: #fff }
+.hero .tit { font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.25; text-wrap: balance; color: #fff }
 .hero .lema { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin-top: 4px }
 .hero .foto { margin: 12px 12px 12px 0; background: var(--oliva) center / cover no-repeat; border-radius: 58% 42% 52% 48% / 44% 54% 46% 56% }
-h1, h2, h3, .tile b, .zona .zh b { font-style: italic; font-weight: 400 }
+h1, h2, h3, .tile b, .zona .zh b { font-weight: 700; letter-spacing: -.005em }
 .tile .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--wine) }
 .tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none }
@@ -290,7 +290,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (s && d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 9 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 10 • Gastrônomos</p>';
     if (s && d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
