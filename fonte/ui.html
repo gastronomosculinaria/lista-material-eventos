@@ -294,6 +294,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     return S.data.eventos.filter(function (e) { return !e.outro && e.escala_status !== 'enviada' && e.prestadores.length && e.data && e.data <= hoje(); })
       .sort(function (a, b) { return String(a.prazo_escala).localeCompare(b.prazo_escala); });
   }
+  // Master abre o formulário; estoque abre a separação direto, sem mudar o compromisso da agenda.
+  function daAgenda(c, b) {
+    if (sess().papel === 'master') { ir('eventoForm', { agenda: c }); return; }
+    fazer(b, api('salvarEvento', { evento: { nome: c.titulo || 'Evento', data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [], agenda_id: c.id } }),
+      function (r) { ir('evento', { id: r.id }); });
+  }
   function podeLista(ev) { var s = sess(); return s ? !!s.estoque : !!(souPrestador(ev) && S.data.convite.coord); }
   function sem(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
@@ -391,15 +397,18 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     if (d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 18 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 19 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
+    if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
+      h = '<button class="li" id="t-cm" style="margin-bottom:14px"><div class="mid"><div class="nm">Contagem do mês ainda não feita</div><div class="hint">Conferir o depósito 1 vez por mês e bater com o inventário</div></div><span class="btn">Contar</span></button>' + h;
  var pe = s.escala ? escalasPend() : [];
     if (pe.length) h = '<button class="li" id="t-es" style="margin-bottom:14px"><div class="mid"><div class="nm">' + pe.length + (pe.length > 1 ? ' escalas' : ' escala') + ' para confirmar</div><div class="hint">Próximo prazo: terça ' + dataBR(pe[0].prazo_escala) + '</div></div><span class="btn">Ver</span></button>' + h;
     if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
     if ($('t-inv')) $('t-inv').onclick = function () { ir('inventario'); };
     if ($('t-es')) $('t-es').onclick = function () { ir('escalas'); };
+    if ($('t-cm')) $('t-cm').onclick = function () { ir('contagem'); };
     $('t-ev').onclick = function () { ir('eventos'); };
     if ($('t-pes')) $('t-pes').onclick = function () { ir('pessoas'); };
     if ($('t-cnt')) $('t-cnt').onclick = function () { ir('contagem'); };
@@ -417,7 +426,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           (c.evento_id ? '<span class="pill concluido">Lista criada</span>' : '<span class="pill montando">Criar lista</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum compromisso na agenda nos próximos 90 dias.</div>';
       document.querySelectorAll('[data-hk]').forEach(function (b) {
-        b.onclick = function () { var c = l[+b.dataset.hk]; if (c.evento_id) ir('evento', { id: c.evento_id }); else ir('eventoForm', { agenda: c }); };
+        b.onclick = function () { var c = l[+b.dataset.hk]; if (c.evento_id) ir('evento', { id: c.evento_id }); else daAgenda(c, b); };
       });
     }).catch(function (e) { if ($('agh')) $('agh').innerHTML = erroAgenda(e); });
     $('troca').onclick = function (e) { e.preventDefault(); api('sair').catch(function () {}); sairDeTudo(); render(); };
@@ -796,7 +805,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.eventos = function () {
     var s = sess();
     header('Eventos', true);
-    bar(s && s.estoque ? (S.data.agenda ? '<button class="btn" id="dag">Puxar da agenda</button>' : '') + '<button class="btn primary" id="novo">+ Novo evento</button>' : '');
+    bar(s && s.estoque ? (S.data.agenda ? '<button class="btn' + (s.papel === 'master' ? '' : ' primary') + '" id="dag">' + (s.papel === 'master' ? 'Puxar da agenda' : 'Abrir da agenda') + '</button>' : '') + (s.papel === 'master' ? '<button class="btn primary" id="novo">+ Novo evento</button>' : '') : '');
     var evs = S.data.eventos.slice().sort(function (a, b) {
       var oa = a.status === 'concluido' ? 1 : 0, ob = b.status === 'concluido' ? 1 : 0;
       return oa - ob || (oa ? String(b.data).localeCompare(a.data) : String(a.data).localeCompare(b.data));
@@ -818,7 +827,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return '<button class="li" data-ak="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
           (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div><span class="pill montando">Criar lista</span></button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum compromisso novo na agenda nos próximos 90 dias.</div>';
-      document.querySelectorAll('[data-ak]').forEach(function (b) { b.onclick = function () { ir('eventoForm', { agenda: l[+b.dataset.ak] }); }; });
+      document.querySelectorAll('[data-ak]').forEach(function (b) { b.onclick = function () { daAgenda(l[+b.dataset.ak], b); }; });
     }).catch(function (e) { if ($('agl')) $('agl').innerHTML = erroAgenda(e); });
   };
 
@@ -844,7 +853,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         b.onclick = function () {
           var c = l[+b.dataset.k];
           if (c.evento_id) ir('evento', { id: c.evento_id });
-          else ir('eventoForm', { agenda: c });
+          else daAgenda(c, b);
         };
       });
     }).catch(function (e) { $('app').innerHTML = erroAgenda(e); });
@@ -866,7 +875,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           '<button type="button" class="chip' + (p.coord ? ' on' : '') + '" data-pc="' + k + '" aria-pressed="' + !!p.coord + '">Coordenador</button></div></div>';
       }).join('') + '</div>' : '<p class="hint">Ninguém marcado ainda.</p>';
     }
-    $('app').innerHTML = '<form id="f"><div' + (ss.estoque ? '' : ' hidden') + '><label class="f" for="nm">Nome do evento</label><input type="text" id="nm" value="' + esc(e.nome) + '" placeholder="Ex.: Casamento Ana e Pedro" required>' +
+    var dd = ss.papel === 'master';
+    $('app').innerHTML = '<form id="f"><div' + (dd ? '' : ' hidden') + '><label class="f" for="nm">Nome do evento</label><input type="text" id="nm" value="' + esc(e.nome) + '" placeholder="Ex.: Casamento Ana e Pedro" required>' +
       '<label class="f" for="dt">Data</label><input type="date" id="dt" value="' + esc(e.data) + '">' +
       '<div class="row"><div><label class="f" for="hi">Começa às</label><input type="time" id="hi" value="' + esc(e.hora_inicio) + '"></div>' +
       '<div><label class="f" for="hf">Termina às</label><input type="time" id="hf" value="' + esc(e.hora_fim) + '"></div></div>' +
@@ -875,8 +885,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         : 'O evento aparece na sua Agenda Google com a lista de material na descrição. Sem horário, entra como dia inteiro.') + '</p>' : '') +
       '</div><div' + (eqOk ? '' : ' hidden') + '><label class="f" for="pq">Equipe do evento (' + '<span id="pn">' + prest.length + '</span>)</label><p class="hint" style="margin-top:0">Só quem estiver marcado aqui abre o evento pelo link do grupo, confirmando nome e sobrenome. O <b>Coordenador</b> (maître do dia) também separa, fecha e reabre a lista deste evento.</p>' +
       '<div id="pl">' + linhasPrest() + '</div><input type="text" id="pq" placeholder="Buscar pessoa para marcar…" autocomplete="off"><div id="pr" class="list" style="margin-top:6px"></div></div>' +
-      (ss.estoque ? '' : '<div hidden>') +
-      '<label class="f" for="ob">Observações (opcional)</label><textarea id="ob">' + esc(e.obs) + '</textarea>' + (ss.estoque ? '' : '</div>') + '<div id="erro" class="err" hidden></div></form>';
+      (dd ? '' : '<div hidden>') +
+      '<label class="f" for="ob">Observações (opcional)</label><textarea id="ob">' + esc(e.obs) + '</textarea>' + (dd ? '' : '</div>') + '<div id="erro" class="err" hidden></div></form>';
     function sync() {}
     function ligar() {
       $('pl').innerHTML = linhasPrest(); $('pn').textContent = prest.length;
@@ -952,9 +962,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var pc = g[1].reduce(function (t, l) { return t + l.qtd_saida; }, 0);
       return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + porSub(g[0], g[1], itemDaLinha, linhaEv, '<div class="list">', '</div>');
     }).join('');
-    if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px"><button class="btn" id="ed">' + (s.estoque ? 'Editar dados e equipe' : 'Editar equipe') + '</button>' +
+    if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px">' + (s.papel === 'master' || s.escala ? '<button class="btn" id="ed">' + (s.papel === 'master' ? 'Editar dados e equipe' : 'Editar equipe') + '</button>' : '') +
       (s.escala && e.prestadores.length ? (e.escala_status !== 'enviada' ? '<button class="btn primary" id="esc">Confirmar e enviar escala</button>' : s.papel === 'master' ? '<button class="btn" id="resc">Reabrir escala</button>' : '') : '') +
-      (!s.estoque || e.status === 'concluido' ? '' : e.status === 'montando' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '<button class="btn" id="reab">Reabrir lista</button>') + '</div><div id="mx"></div>';
+      (!s.estoque || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : '<button class="btn" id="reab">Reabrir lista para correção</button>') + '</div><div id="mx"></div>';
     else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
@@ -1368,7 +1378,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é Master (acesso total), quem cuida do estoque e quem monta a escala dos eventos. Coordenadores (maîtres) não usam senha: são marcados na equipe de cada evento.</p>' +
       (ps.length ? '<div class="list">' + ps.map(function (p) {
         return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
-          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Master</span>' : '<span class="pill montando">' + [p.estoque ? (p.pode_inventario ? 'Estoque e inventário' : 'Estoque') : '', p.escala ? 'Escala' : ''].filter(Boolean).join(' + ') + '</span>') + '</button>';
+          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Master</span>' : '<span class="pill montando">' + [p.estoque ? 'Estoquista' : '', p.escala ? 'Escala' : ''].filter(Boolean).join(' + ') + '</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum estoquista cadastrado.</div>') +
       '<h2>Senha master</h2><p class="sub">Senha geral do Master. Dá acesso total.</p>' +
       '<label class="f" for="nm2">Nova senha master</label><input type="password" id="nm2" autocomplete="new-password">' +
@@ -1402,14 +1412,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<label class="f" for="tel">Telefone</label><input type="tel" id="tel" value="' + esc(p.telefone) + '">' +
       '<label class="f" for="pw">' + (S.p.id ? 'Nova senha pessoal (deixe vazio para manter)' : 'Senha pessoal') + '</label><input type="text" id="pw" autocomplete="off">' +
       '<label class="check"><input type="checkbox" id="crd"' + (p.coordenador ? ' checked' : '') + '> Master: acesso total e histórico</label>' +
-      '<label class="check"><input type="checkbox" id="est"' + (p.estoque ? ' checked' : '') + '> Estoque: separar material, retorno e contagem</label>' +
+      '<label class="check"><input type="checkbox" id="est"' + (p.estoque ? ' checked' : '') + '> Estoquista: inventário geral, grupos e itens, separação de material e contagem do mês</label>' +
       '<label class="check"><input type="checkbox" id="esk"' + (p.escala ? ' checked' : '') + '> Monta a escala: equipe dos eventos e envio ao Montador</label>' +
-      '<label class="check"><input type="checkbox" id="inv"' + (p.pode_inventario ? ' checked' : '') + '> Pode incluir, editar e excluir itens do inventário</label>' +
       '<label class="check"><input type="checkbox" id="atv"' + (p.ativo ? ' checked' : '') + '> Acesso liberado</label><div id="erro" class="err" hidden></div></form>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('inv').checked, coordenador: $('crd').checked, estoque: $('est').checked, escala: $('esk').checked, ativo: $('atv').checked } }),
+      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('est').checked, coordenador: $('crd').checked, estoque: $('est').checked, escala: $('esk').checked, ativo: $('atv').checked } }),
         function () { toast('Salvo'); voltar(); });
     };
   };
