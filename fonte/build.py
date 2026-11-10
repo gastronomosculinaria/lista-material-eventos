@@ -1,4 +1,4 @@
-import os
+import os, json
 d=os.path.dirname(os.path.abspath(__file__)); src=lambda f: open(os.path.join(d,'src',f),encoding='utf-8').read()
 ui=src('ui.html')
 import base64
@@ -22,7 +22,16 @@ def mini(h):
         e=os.path.join(t,'e.html'); o=os.path.join(t,'o.html'); open(e,'w',encoding='utf-8').write(h)
         subprocess.run(['node',os.path.join(d,'tools','minificar.js'),e,o],check=True)
         return open(o,encoding='utf-8').read()
-idx=mini(idx)
+# O link do Apps Script (/exec) só encaminha para a página do GitHub Pages, que é o app completo.
+# Assim a tela não depende do limite de 100 KB do cache do Apps Script.
+PAGES='https://gastronomosculinaria.github.io/lista-material-eventos/'
+idx=('<!DOCTYPE html>\n<html lang="pt-BR"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+  '<body style="font-family:sans-serif;background:#fbf7ee;color:#2b2523;text-align:center;padding:40px 20px">'
+  '<img src="'+MARCA_URL+'icone-180.png" alt="" width="90" height="90" style="border-radius:20px">'
+  '<h1 style="font-size:22px">Gastrônomos: Material de Eventos</h1><p>O app agora abre pelo link da equipe.</p>'
+  '<p><a id="ir" href="'+PAGES+'" target="_top" style="display:inline-block;background:#c0615e;color:#fff;padding:14px 24px;border-radius:12px;text-decoration:none;font-weight:600">Abrir o app</a></p>'
+  '<p style="font-size:13px;color:#6b6460">'+PAGES+'</p>'
+  '<script>try{window.top.location.href='+json.dumps(PAGES)+'}catch(e){}</script></body></html>\n')
 tam=len(idx.encode('utf-8'))
 print('index.html', tam, 'bytes')
 assert tam < 95000, 'index.html grande demais para o cache do Apps Script'

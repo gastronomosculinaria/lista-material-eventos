@@ -99,11 +99,12 @@ var CORE = (function () {
       if (ev.status === 'concluido' && Date.now() - new Date(ev.concluido_em).getTime() > 3 * 86400000) return null;
       return { papel: 'prestador', evento_id: ev.id, nome: s.nome, telefone: s.telefone || '', coord: !!naLista(ev, s.nome).coord };
     }
-    if (s.pessoa_id === 'master') return { papel: 'master', nome: 'Master', inventario: true, equipe: true };
+    if (s.pessoa_id === 'master') return { papel: 'master', nome: 'Master', inventario: true, equipe: true, escala: true, estoque: true };
     var p = porId(db.all('pessoas'), s.pessoa_id);
     if (!p || !sim(p.ativo)) return null;
-    if (sim(p.coordenador)) return { papel: 'master', nome: p.nome, id: p.id, inventario: true, equipe: true };
-    return { papel: 'estoquista', nome: p.nome, id: p.id, inventario: sim(p.pode_inventario), equipe: true };
+    if (sim(p.coordenador)) return { papel: 'master', nome: p.nome, id: p.id, inventario: true, equipe: true, escala: true, estoque: true };
+    var est = p.estoque !== 'nao';
+    return { papel: est ? 'estoquista' : 'escala', nome: p.nome, id: p.id, inventario: est && sim(p.pode_inventario), equipe: true, escala: sim(p.escala), estoque: est };
   }
 
   function log(db, quem, acao, detalhe) {
@@ -166,10 +167,21 @@ var CORE = (function () {
 
   function pedeEquipe(s) { if (!s) falha('Entre com sua senha na Área da equipe para fazer isso.'); }
   function pedeInventario(s) { pedeEquipe(s); if (!s.inventario) falha('Sua senha não tem permissão para alterar o inventário. Peça ao Master.'); }
+  function pedeEstoque(s) { pedeEquipe(s); if (!s.estoque) falha('Sua senha é só da escala. O estoque fica com os estoquistas.'); }
+  function pedeEscala(s) { pedeEquipe(s); if (!s.escala) falha('Só quem monta a escala (ou o Master) pode mexer na equipe dos eventos.'); }
+  // Prazo para confirmar a escala: a terça-feira que fecha a semana do evento (semana de quarta a terça).
+  function prazoEscala(data) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(data || ''); if (!m) return '';
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    d.setUTCDate(d.getUTCDate() + ((2 - d.getUTCDay() + 7) % 7));
+    return d.toISOString().slice(0, 10);
+  }
   function pedeCoord(s) { pedeEquipe(s); if (s.papel !== 'master') falha('Só o Master pode fazer isso.'); }
   // Lista de material de um evento: estoque/Master ou o coordenador (maître) marcado nesse evento.
   function pedeLista(s, conv, evId) {
-    if (s || (conv && conv.coord && conv.evento_id === evId)) return;
+    if (s && s.estoque) return;
+    if (s) pedeEstoque(s);
+    if (conv && conv.coord && conv.evento_id === evId) return;
     falha('Só o estoque ou o coordenador deste evento pode mexer na lista de material.');
   }
 
@@ -274,7 +286,7 @@ var CORE = (function () {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
           prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
-          retorno_por: e.retorno_por, separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
+          retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
@@ -283,11 +295,12 @@ var CORE = (function () {
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
         ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
-      if (s) out.perdas = perdasPendentes(db);
+      if (s && !s.estoque) { out.itens = []; out.grupos = []; }
+      if (s && s.estoque) out.perdas = perdasPendentes(db);
       if (s) out.equipe = equipeAtiva(db).map(function (x) { return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '' }; });
       if (s && s.papel === 'master') {
         out.pessoas = db.all('pessoas').map(function (x) {
-          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
+          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador), escala: sim(x.escala), estoque: x.estoque !== 'nao' };
         });
         out.masterPadrao = !getConfig(db, 'master_hash');
       }
@@ -326,7 +339,7 @@ var CORE = (function () {
     },
 
     salvarEquipe: function (db, p, s, quem) {
-      pedeEquipe(s);
+      pedeEscala(s);
       var x = p.pessoa || {}, nome = texto(x.nome, 80);
       if (partesNome(nome).length < 2) falha('Informe nome e sobrenome.');
       var dados = { nome: nome, telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), ativo: x.ativo === false ? 'nao' : 'sim' };
@@ -516,12 +529,19 @@ var CORE = (function () {
 
     salvarEvento: function (db, p, s, quem) {
       pedeEquipe(s);
-      var e = p.evento || {};
+      var e = p.evento || {}, antigo = e.id ? porId(db.all('eventos'), e.id) : null;
+      if (e.id && !antigo) falha('Evento não encontrado.');
+      if (!s.estoque && !antigo) falha('Sua senha é só da escala: peça ao estoque ou ao Master para criar o evento.');
+      if (!s.estoque) ['nome', 'data', 'local', 'obs', 'hora_inicio', 'hora_fim'].forEach(function (k) { e[k] = antigo[k] || ''; });
       var nome = texto(e.nome, 120);
       if (!nome) falha('Dê um nome ao evento.');
-      var prest = (e.prestadores || []).map(function (x) { var o = { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30) }; if (x.coord) o.coord = true; return o; })
-        .filter(function (x) { return x.nome; });
-      prest.forEach(function (x) {
+      var podeEquipe = s.escala && (!antigo || antigo.escala_status !== 'enviada' || s.papel === 'master');
+      var prest = (e.prestadores || []).map(function (x) {
+        var o = { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30), secao: texto(x.secao, 30), funcao: texto(x.funcao, 60) };
+        if (x.coord) o.coord = true; return o;
+      }).filter(function (x) { return x.nome; });
+      if (!podeEquipe) prest = antigo ? json(antigo.prestadores, []) : [];
+      if (podeEquipe) prest.forEach(function (x) {
         if (partesNome(x.nome).length < 2) falha('Informe nome e sobrenome de ' + x.nome + '.');
         var c = x.id ? porId(db.all('equipe'), x.id) : null;
         if (!c) { c = incluirNaEquipe(db, x.nome, x.telefone, '', quem); x.id = c.id; }
@@ -548,7 +568,7 @@ var CORE = (function () {
     },
 
     excluirEvento: function (db, p, s, quem) {
-      pedeEquipe(s);
+      pedeEstoque(s);
       var ev = porId(db.all('eventos'), p.id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'montando') falha('Só dá para excluir um evento que ainda não saiu.');
@@ -649,8 +669,26 @@ var CORE = (function () {
       return true;
     },
 
+    enviarEscala: function (db, p, s, quem) {
+      pedeEscala(s);
+      var ev = porId(db.all('eventos'), p.id);
+      if (!ev) falha('Evento não encontrado.');
+      var prest = json(ev.prestadores, []);
+      if (!prest.length) falha('A equipe deste evento está vazia.');
+      if (p.reabrir) {
+        pedeCoord(s);
+        db.update('eventos', ev.id, { escala_status: '' });
+        log(db, quem, 'Reabriu a escala', ev.nome);
+        return true;
+      }
+      if (ev.escala_status === 'enviada') falha('A escala deste evento já foi enviada.');
+      db.update('eventos', ev.id, { escala_status: 'enviada', escala_por: texto(p.who && p.who.nome, 80), escala_em: agora() });
+      log(db, quem, 'Confirmou e enviou a escala', ev.nome + ' (' + ev.data + '): ' + prest.map(function (x) { return x.nome + (x.secao ? ' / ' + x.secao : '') + (x.funcao ? ' / ' + x.funcao : ''); }).join(', '));
+      return true;
+    },
+
     confirmarPerda: function (db, p, s, quem) {
-      pedeEquipe(s);
+      pedeEstoque(s);
       var l = porId(db.all('evento_itens'), p.id);
       if (!l || l.perda !== 'pendente') falha('Esta perda já foi resolvida.');
       var ev = porId(db.all('eventos'), l.evento_id) || { nome: '' }, it = porId(db.all('itens'), l.item_id);
@@ -679,7 +717,8 @@ var CORE = (function () {
       var nome = texto(x.nome, 80);
       if (!nome) falha('Informe o nome do estoquista.');
       var dados = { nome: nome, telefone: texto(x.telefone, 30), pode_inventario: sim(x.pode_inventario) ? 'sim' : 'nao', coordenador: sim(x.coordenador) ? 'sim' : 'nao',
-        ativo: x.ativo === false ? 'nao' : 'sim' };
+        escala: sim(x.escala) ? 'sim' : 'nao', estoque: x.estoque === false ? 'nao' : 'sim', ativo: x.ativo === false ? 'nao' : 'sim' };
+      if (dados.estoque === 'nao' && dados.escala === 'nao' && dados.coordenador === 'nao') falha('Marque pelo menos uma função: estoque, escala ou Master.');
       var senha = texto(x.senha, 100);
       if (senha) {
         if (senha.length < 4) falha('A senha precisa ter pelo menos 4 caracteres.');
@@ -714,7 +753,7 @@ var CORE = (function () {
     },
 
     listarAgenda: function (db, p, s) {
-      pedeEquipe(s);
+      pedeEstoque(s);
       if (!db.agenda) falha('A Agenda não está ligada.');
       var usados = {};
       db.all('eventos').forEach(function (e) { if (e.agenda_id) usados[e.agenda_id] = e.id; });
@@ -736,7 +775,7 @@ var CORE = (function () {
     },
 
     salvarContagem: function (db, p, s, quem) {
-      pedeEquipe(s);
+      pedeEstoque(s);
       var ajustar = !!p.ajustar;
       if (ajustar) pedeInventario(s);
       var itens = db.all('itens'), fora = foraDoDeposito(db), em = agora(), regs = [], difs = [], porNome = quem.nome + ' ' + quem.telefone;
@@ -781,11 +820,12 @@ var CORE = (function () {
   var TABELAS = {
     itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
-      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave'],
+      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave',
+      'escala_status', 'escala_por', 'escala_em'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
-    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador'],
+    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
     equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em'],
     config: ['id', 'valor'],
