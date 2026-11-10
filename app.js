@@ -177,6 +177,13 @@ var CORE = (function () {
     d.setUTCDate(d.getUTCDate() + ((2 - d.getUTCDay() + 7) % 7));
     return d.toISOString().slice(0, 10);
   }
+  // Nome da semana como no Montador de Escala: quarta a terça, "dd.mm a dd.mm.aaaa".
+  function semanaEscala(data) {
+    var fim = prazoEscala(data); if (!fim) return '';
+    var f = new Date(fim + 'T00:00:00Z'), i = new Date(f.getTime() - 6 * 86400000);
+    function dm(d) { return ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2); }
+    return dm(i) + ' a ' + dm(f) + '.' + f.getUTCFullYear();
+  }
   function pedeCoord(s) { pedeEquipe(s); if (s.papel !== 'master') falha('Só o Master pode fazer isso.'); }
   // Lista de material de um evento: estoque/Master ou o coordenador (maître) marcado nesse evento.
   function pedeLista(s, conv, evId) {
@@ -679,11 +686,20 @@ var CORE = (function () {
       if (p.reabrir) {
         pedeCoord(s);
         db.update('eventos', ev.id, { escala_status: '' });
+        db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
         log(db, quem, 'Reabriu a escala', ev.nome);
         return true;
       }
       if (ev.escala_status === 'enviada') falha('A escala deste evento já foi enviada.');
-      db.update('eventos', ev.id, { escala_status: 'enviada', escala_por: texto(p.who && p.who.nome, 80), escala_em: agora() });
+      var em = agora(), por = texto(p.who && p.who.nome, 80), sem = semanaEscala(ev.data);
+      db.update('eventos', ev.id, { escala_status: 'enviada', escala_por: por, escala_em: em });
+      // Aba "escalas" da planilha: uma linha por pessoa; o Montador de Escala lê daqui.
+      var linhas = prest.map(function (x, i) {
+        return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.nome, secao: x.secao || 'Salão',
+          funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
+      });
+      db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
+      if (db.insertMany) db.insertMany('escalas', linhas); else linhas.forEach(function (r) { db.insert('escalas', r); });
       log(db, quem, 'Confirmou e enviou a escala', ev.nome + ' (' + ev.data + '): ' + prest.map(function (x) { return x.nome + (x.secao ? ' / ' + x.secao : '') + (x.funcao ? ' / ' + x.funcao : ''); }).join(', '));
       return true;
     },
@@ -829,6 +845,7 @@ var CORE = (function () {
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
     equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em'],
+    escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
   };
