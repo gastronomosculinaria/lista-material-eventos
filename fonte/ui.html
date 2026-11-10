@@ -124,6 +124,7 @@ textarea { min-height: 80px }
 .check { display: flex; gap: 10px; align-items: center; min-height: 48px }
 .check input { width: 22px; height: 22px }
 .chips.w { flex-wrap: wrap; overflow: visible }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px }
 .loading { text-align: center; color: var(--muted); padding: 40px 0 }
 h3.grp { display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-size: 18px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--wine) }
 h3.grp small { font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted) }
@@ -197,6 +198,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   var PAGES = 'https://gastronomosculinaria.github.io/lista-material-eventos/';
   // link do evento enviado no grupo: ?e=<evento>.<chave>
   var LINK = (/[?#&]e=([a-z0-9]+\.[a-z0-9]+)/.exec(location.search + location.hash) || [])[1] || '';
+  // link de cadastro de pessoa nova: ?cadastro=<chave>
+  var CAD = (/[?#&]cadastro=([a-z0-9]+)/.exec(location.search + location.hash) || [])[1] || '';
   var LEIT = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
   function novoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
   function erroRede(m) { var e = new Error(m || 'Sem conexão. Confira a internet e tente de novo.'); e.rede = true; return e; }
@@ -280,7 +283,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       .catch(function (e) { S.erro = e.message; if (btn) btn.disabled = false; mostrarErro(); });
   }
   function mostrarErro() {
-    var el = $('erro'); if (el) { el.hidden = !S.erro; el.textContent = S.erro; el.scrollIntoView({ block: 'center' }); }
+    var el = document.querySelector('#modal #erro') || $('erro'); if (el) { el.hidden = !S.erro; el.textContent = S.erro; el.scrollIntoView({ block: 'center' }); }
     else if (S.erro) toast(S.erro);
   }
   function sess() { return S.data && S.data.sessao; }
@@ -300,14 +303,62 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     fazer(b, api('salvarEvento', { evento: { nome: c.titulo || 'Evento', data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [], agenda_id: c.id } }),
       function (r) { ir('evento', { id: r.id }); });
   }
-  function podeLista(ev) { var s = sess(); return s ? !!s.estoque : !!(souPrestador(ev) && S.data.convite.coord); }
+  function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord); }
+  // "Ana Paula de Souza Lima" -> "Ana Lima"
+  function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
+  function papelTxt(s) { return s.papel === 'master' ? 'Master' : s.estoque ? 'Estoquista' : 'Coordenação'; }
+  var FUNCOES = ['Garçom', 'Maître', 'Cozinheiro(a)', 'Auxiliar de cozinha', 'Copeiro(a)', 'Barman', 'Recepção', 'Carregador / Frete', 'Limpeza'];
+  // Cadastro completo (RG, CPF, Pix): só a coordenação e o Master, buscado na hora.
+  function fichaCompleta(id, depois) {
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><div class="loading">Abrindo cadastro…</div></div></div>';
+    (id ? api('fichaEquipe', { id: id }) : Promise.resolve(null)).then(function (x) {
+      var novo = !x; x = x || { nome: '', telefone: '', funcao: '', rg: '', cpf: '', pix: '' };
+      function campo(i, rot, v, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" value="' + esc(v) + '"' + (extra || '') + '>'; }
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Cadastro"><h2>' + (novo ? 'Cadastrar pessoa' : esc(x.nome)) + '</h2>' +
+        (x.bloqueado ? '<div class="err" style="margin-bottom:10px"><b>Bloqueado(a)</b>: ' + esc(x.motivo) + (x.bloqueado_por ? '<br><small>' + esc(x.bloqueado_por) + '</small>' : '') + '</div>' : '') +
+        (x.novo ? '<div class="panel" style="margin-bottom:10px">Cadastro feito pela própria pessoa pelo link. Confira e toque em <b>Salvar</b>.</div>' : '') +
+        campo('cn1', 'Nome completo', x.nome) + campo('ct1', 'Telefone com DDD', x.telefone, 'tel') +
+        campo('cf1', 'Função', x.funcao, 'text', ' list="funcoes"') + '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' +
+        campo('cr1', 'RG', x.rg) + campo('cc1', 'CPF', x.cpf, 'text', ' inputmode="numeric"') + campo('cp1', 'Chave Pix', x.pix) +
+        '<div id="mb"></div><div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px;flex-wrap:wrap"><button class="btn primary" id="cok">Salvar</button>' +
+        (novo ? '' : (x.bloqueado ? '<button class="btn" id="cdb">Desbloquear</button>' : '<button class="btn danger" id="cbl">Bloquear</button>') + '<button class="btn" id="crm">Tirar do cadastro</button>') +
+        '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
+      $('m-fc').onclick = fecharModal;
+      function fim(msg) { return function () { fecharModal(); toast(msg); if (depois) depois(); else render(); }; }
+      function salvar(btn, ativo) {
+        fazer(btn, api('salvarEquipe', { pessoa: { id: x.id, nome: $('cn1').value, telefone: $('ct1').value, funcao: $('cf1').value, rg: $('cr1').value, cpf: $('cc1').value, pix: $('cp1').value, ativo: ativo, revisado: true } }), fim(ativo ? 'Cadastro salvo' : 'Tirado do cadastro'));
+      }
+      $('cok').onclick = function () { salvar(this, true); };
+      if ($('crm')) $('crm').onclick = function () { salvar(this, false); };
+      if ($('cdb')) $('cdb').onclick = function () { fazer(this, api('bloquearEquipe', { id: x.id, bloquear: false }), fim('Desbloqueado')); };
+      if ($('cbl')) $('cbl').onclick = function () {
+        $('mb').innerHTML = '<div class="panel" style="margin-top:12px"><label class="f" for="bmo" style="margin-top:0">Justificativa do bloqueio</label><textarea id="bmo" placeholder="Por que esta pessoa não deve mais ser escalada?"></textarea>' +
+          '<p class="hint">Pessoa bloqueada não pode ser marcada em eventos nem abrir o link do evento.</p><button class="btn danger" id="bok">Bloquear</button></div>';
+        $('bmo').focus();
+        $('bok').onclick = function () { fazer(this, api('bloquearEquipe', { id: x.id, bloquear: true, motivo: $('bmo').value }), fim('Pessoa bloqueada')); };
+      };
+    }).catch(function (e) { fecharModal(); toast(e.message); });
+  }
+  function linkCadastro(nova) {
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><div class="loading">Gerando link…</div></div></div>';
+    api('linkCadastro', { nova: !!nova }).then(function (r) {
+      var u = PAGES + '?cadastro=' + r.chave, t = 'Cadastro para trabalhar nos eventos da Gastrônomos: preencha seus dados neste link.\n' + u;
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link de cadastro"><h2>Link de cadastro</h2><p class="sub">Mande para a pessoa nova. Ela preenche nome completo, RG, CPF, telefone, função e chave Pix, e o cadastro aparece aqui para você conferir.</p>' +
+        '<textarea id="ltx" readonly style="min-height:110px">' + esc(t) + '</textarea><div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" id="lcp">Copiar</button>' +
+        '<a class="btn" href="https://wa.me/?text=' + encodeURIComponent(t) + '" target="_blank" rel="noopener">WhatsApp</a><button class="btn" id="m-fc">Fechar</button></div>' +
+        '<p class="hint" style="margin-top:16px">Link foi parar onde não devia? <a href="#" id="lnv">Gerar link novo</a> (o atual para de funcionar).</p></div></div>';
+      $('m-fc').onclick = fecharModal;
+      $('lcp').onclick = function () { var a = $('ltx'); a.select(); try { navigator.clipboard.writeText(t); } catch (e) { document.execCommand('copy'); } toast('Link copiado'); };
+      $('lnv').onclick = function (e) { e.preventDefault(); linkCadastro(true); };
+    }).catch(function (e) { fecharModal(); toast(e.message); });
+  }
   function sem(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
   function header(titulo, podeVoltar) {
     var s = sess();
     $('hdr').innerHTML = (podeVoltar ? '<button class="back" id="bk" aria-label="Voltar">←</button>' : '<span style="width:4px"></span>') +
       '<h1>' + esc(titulo) + '</h1>' +
-      (S.who ? '<div class="who">' + esc(S.who.nome) + (s ? '<br>' + (s.papel === 'master' ? 'Master' : s.estoque ? 'Estoquista' : 'Escala') : S.data && S.data.convite ? '<br>' + (S.data.convite.coord ? 'Coordenador do evento' : 'Equipe do evento') : '') + '</div>' : '');
+      (S.who ? '<div class="who">' + esc(S.who.nome) + (s ? '<br>' + papelTxt(s) : S.data && S.data.convite ? '<br>' + (S.data.convite.coord ? 'Coordenador do evento' : 'Equipe do evento') : '') + '</div>' : '');
     if (podeVoltar) $('bk').onclick = voltar;
   }
   function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
@@ -390,19 +441,20 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (s) {
       var uc = d.ultimaContagem;
       if (s.estoque) h += '<button class="tile" id="t-cnt"><b>Contagem</b><span>' + (uc ? 'Última em ' + quando(uc.em).split(',')[0] + (uc.diferencas ? ' · ' + uc.diferencas + ' diferenças' : '') : 'Conferir o depósito') + '</span></button>';
-      if (s.escala) h += '<button class="tile" id="t-eq"><b>Equipe de eventos</b><span class="big">' + (d.equipe || []).length + '</span><span>pessoas cadastradas</span></button>';
+      if (s.escala) h += '<button class="tile" id="t-eq"><b>Equipe de eventos</b><span class="big">' + (d.equipe || []).length + '</span><span>pessoas no cadastro</span></button>';
       if (s.papel === 'master') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
         '<button class="tile" id="t-his"><b>Histórico</b><span>Quem acessou e o que mudou</span></button>';
-      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'master' ? 'Master' + (s.id ? ' · ' + s.nome : '') : (s.estoque ? 'Estoquista ' : 'Escala · ') + s.nome) + '</b></span><span class="btn">Sair</span></button>';
+      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'master' ? 'Master' + (s.id ? ' · ' + s.nome : '') : papelTxt(s) + ' · ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
     }
     h += '</div>';
     if (d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 19 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 20 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
       h = '<button class="li" id="t-cm" style="margin-bottom:14px"><div class="mid"><div class="nm">Contagem do mês ainda não feita</div><div class="hint">Conferir o depósito 1 vez por mês e bater com o inventário</div></div><span class="btn">Contar</span></button>' + h;
- var pe = s.escala ? escalasPend() : [];
+    var pe = s.escala ? escalasPend() : [], nc = s.escala ? (d.equipe || []).filter(function (x) { return x.novo; }).length : 0;
+    if (nc) h = '<button class="li" id="t-nc" style="margin-bottom:14px"><div class="mid"><div class="nm">' + nc + (nc > 1 ? ' cadastros novos' : ' cadastro novo') + ' pelo link</div><div class="hint">Confira os dados</div></div><span class="btn">Ver</span></button>' + h;
     if (pe.length) h = '<button class="li" id="t-es" style="margin-bottom:14px"><div class="mid"><div class="nm">' + pe.length + (pe.length > 1 ? ' escalas' : ' escala') + ' para confirmar</div><div class="hint">Próximo prazo: terça ' + dataBR(pe[0].prazo_escala) + '</div></div><span class="btn">Ver</span></button>' + h;
     if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
@@ -414,6 +466,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if ($('t-cnt')) $('t-cnt').onclick = function () { ir('contagem'); };
     if ($('t-his')) $('t-his').onclick = function () { ir('historico'); };
     if ($('t-eq')) $('t-eq').onclick = function () { ir('equipe'); };
+    if ($('t-nc')) $('t-nc').onclick = function () { ir('equipe', { novos: 1 }); };
     if ($('t-pd')) $('t-pd').onclick = function () { ir('perdas'); };
     $('t-out').onclick = function () { api('sair').catch(function () {}); sairDeTudo(); toast('Você saiu da área da equipe'); render(); };
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
@@ -423,7 +476,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('agh').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
         return '<button class="li" data-hk="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
           (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div>' +
-          (c.evento_id ? '<span class="pill concluido">Lista criada</span>' : '<span class="pill montando">Criar lista</span>') + '</button>';
+          (c.evento_id ? '<span class="pill concluido">' + (s.estoque ? 'Lista criada' : 'Aberto') + '</span>' : '<span class="pill montando">' + (s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum compromisso na agenda nos próximos 90 dias.</div>';
       document.querySelectorAll('[data-hk]').forEach(function (b) {
         b.onclick = function () { var c = l[+b.dataset.hk]; if (c.evento_id) ir('evento', { id: c.evento_id }); else daAgenda(c, b); };
@@ -805,7 +858,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.eventos = function () {
     var s = sess();
     header('Eventos', true);
-    bar(s && s.estoque ? (S.data.agenda ? '<button class="btn' + (s.papel === 'master' ? '' : ' primary') + '" id="dag">' + (s.papel === 'master' ? 'Puxar da agenda' : 'Abrir da agenda') + '</button>' : '') + (s.papel === 'master' ? '<button class="btn primary" id="novo">+ Novo evento</button>' : '') : '');
+    bar(s && (s.estoque || s.escala) ? (S.data.agenda ? '<button class="btn' + (s.papel === 'master' ? '' : ' primary') + '" id="dag">' + (s.papel === 'master' ? 'Puxar da agenda' : 'Abrir da agenda') + '</button>' : '') + (s.papel === 'master' ? '<button class="btn primary" id="novo">+ Novo evento</button>' : '') : '');
     var evs = S.data.eventos.slice().sort(function (a, b) {
       var oa = a.status === 'concluido' ? 1 : 0, ob = b.status === 'concluido' ? 1 : 0;
       return oa - ob || (oa ? String(b.data).localeCompare(a.data) : String(a.data).localeCompare(b.data));
@@ -816,7 +869,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
         '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : STATUS[e.status]) + '</span></button>';
     }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
-    if (s && s.estoque && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda sem lista de material.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
+    if (s && (s.estoque || s.escala) && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda não abertos aqui.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
     if ($('novo')) $('novo').onclick = function () { ir('eventoForm', {}); };
     if ($('dag')) $('dag').onclick = function () { ir('agenda'); };
@@ -825,7 +878,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       l = l.filter(function (c) { return !c.evento_id; });
       $('agl').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
         return '<button class="li" data-ak="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
-          (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div><span class="pill montando">Criar lista</span></button>';
+          (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div><span class="pill montando">' + (s.estoque ? 'Criar lista' : 'Abrir') + '</span></button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum compromisso novo na agenda nos próximos 90 dias.</div>';
       document.querySelectorAll('[data-ak]').forEach(function (b) { b.onclick = function () { daAgenda(l[+b.dataset.ak], b); }; });
     }).catch(function (e) { if ($('agl')) $('agl').innerHTML = erroAgenda(e); });
@@ -900,14 +953,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       prest.forEach(function (p) { ja[sem(p.nome)] = 1; });
       if (!ws.length) { $('pr').innerHTML = ''; return; }
       var l = (S.data.equipe || []).filter(function (x) { var n = sem(x.nome); return !ja[n] && ws.every(function (w) { return n.indexOf(w) >= 0; }); }).slice(0, 8);
-      var exato = (S.data.equipe || []).some(function (x) { return sem(x.nome) === q; });
       $('pr').innerHTML = l.map(function (x) {
+        if (x.bloqueado) return '<div class="li static"><div class="mid"><div class="nm">' + esc(x.nome) + '</div><div class="hint" style="color:var(--bad)">Bloqueado: ' + esc(x.motivo) + '</div></div></div>';
         return '<button type="button" class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(x.nome) + '</div>' + (x.funcao ? '<div class="hint">' + esc(x.funcao) + '</div>' : '') + '</div><span class="btn">Marcar</span></button>';
-      }).join('') + (ws.length > 1 && !exato && !ja[q] ? '<button type="button" class="li" id="pnovo"><div class="mid"><div class="nm">+ Pessoa nova: ' + esc($('pq').value.trim()) + '</div><div class="hint">Entra no cadastro da equipe</div></div></button>' : '');
+      }).join('') + (!l.length ? '<p class="hint">Ninguém com esse nome no cadastro. Pessoa nova: cadastre em <b>Equipe de eventos</b> ou mande o link de cadastro para ela.</p>' : '');
       document.querySelectorAll('[data-pe]').forEach(function (b) {
         b.onclick = function () { var x = (S.data.equipe || []).filter(function (y) { return y.id === b.dataset.pe; })[0]; prest.push({ id: x.id, nome: x.nome, telefone: x.telefone, secao: (/^(Salão|Cozinha|Frete)/.exec(x.funcao || '') || ['Salão'])[0], funcao: '' }); $('pq').value = ''; achar(); ligar(); };
       });
-      if ($('pnovo')) $('pnovo').onclick = function () { prest.push({ id: '', nome: $('pq').value.trim().replace(/\s+/g, ' '), telefone: '', secao: 'Salão', funcao: '' }); $('pq').value = ''; achar(); ligar(); };
     }
     ligar();
     $('pq').oninput = achar;
@@ -964,7 +1016,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }).join('');
     if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px">' + (s.papel === 'master' || s.escala ? '<button class="btn" id="ed">' + (s.papel === 'master' ? 'Editar dados e equipe' : 'Editar equipe') + '</button>' : '') +
       (s.escala && e.prestadores.length ? (e.escala_status !== 'enviada' ? '<button class="btn primary" id="esc">Confirmar e enviar escala</button>' : s.papel === 'master' ? '<button class="btn" id="resc">Reabrir escala</button>' : '') : '') +
-      (!s.estoque || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : '<button class="btn" id="reab">Reabrir lista para correção</button>') + '</div><div id="mx"></div>';
+      (!(s.estoque || s.escala || s.separa) || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : '<button class="btn" id="reab">Reabrir lista para correção</button>') + '</div><div id="mx"></div>';
     else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
@@ -977,12 +1029,15 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Equipe do evento"><h2>Equipe · ' + e.prestadores.length + ' pessoas</h2>' +
         agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).map(function (g) {
           return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (p) {
-            return '<div class="li static" style="padding:8px 12px"><div class="mid"><div class="nm">' + esc(p.nome) + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') + '</div>' +
-              ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + '</div></div>';
+            return '<div class="li static" style="padding:8px 12px"><div class="mid"><button type="button" class="nm linkbtn" data-nc="' + esc(p.nome) + '" aria-label="Ver nome completo">' + esc(curto(p.nome)) + '</button>' + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') +
+              ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>' +
+              (s && s.escala && p.id ? '<button type="button" class="btn" data-fc="' + esc(p.id) + '">Cadastro</button>' : '') + '</div>';
           }).join('') + '</div>';
         }).join('') + '<div class="row" style="margin-top:16px"><button class="btn" id="m-fc">Fechar</button></div></div></div>';
       $('mbg').onclick = function (y) { if (y.target.id === 'mbg') fecharModal(); };
       $('m-fc').onclick = fecharModal;
+      document.querySelectorAll('[data-nc]').forEach(function (b) { b.onclick = function () { b.textContent = b.textContent === b.dataset.nc ? curto(b.dataset.nc) : b.dataset.nc; }; });
+      document.querySelectorAll('[data-fc]').forEach(function (b) { b.onclick = function () { fichaCompleta(b.dataset.fc); }; });
     };
     if ($('esc')) $('esc').onclick = function () {
       $('mx').innerHTML = '<div class="panel" style="margin-top:12px"><p>Confirma que estas <b>' + e.prestadores.length + ' pessoas</b> trabalharam em ' + esc(e.nome) + ' e a escala pode ir para o Montador de Escala?</p><div class="row"><button class="btn primary" id="esok">Confirmar e enviar</button><button class="btn" id="esno">Ainda não</button></div></div>';
@@ -1335,34 +1390,31 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   };
 
   V.equipe = function () {
-    var s = sess(), l = S.data.equipe || [];
+    var s = sess(), l = S.data.equipe || [], nv = l.filter(function (x) { return x.novo; }).length;
     header('Equipe de eventos', true);
-    bar((s.papel === 'master' ? '<button class="btn" id="imp">Importar lista</button>' : '') + '<button class="btn primary" id="novo">+ Pessoa</button>');
-    $('app').innerHTML = '<p class="sub">' + l.length + ' pessoas. Marque quem vai em cada evento na tela do evento.</p><div class="search"><input type="text" id="q" placeholder="Buscar pelo nome…" aria-label="Buscar pessoa"></div><div id="lst" class="list"></div>';
+    bar((s.papel === 'master' ? '<button class="btn" id="imp">Importar</button>' : '') + '<button class="btn" id="novo">+ Cadastrar</button><button class="btn primary" id="lcd">Link de cadastro</button>');
+    var fil = S.p.novos ? 'novos' : S.p.fil || 'todos';
+    $('app').innerHTML = '<p class="sub">' + l.length + ' pessoas. O melhor é mandar o <b>link de cadastro</b> para a pessoa nova preencher os próprios dados.</p>' +
+      '<div class="chips" style="margin-bottom:10px">' + [['todos', 'Todos'], ['novos', 'Novos pelo link' + (nv ? ' (' + nv + ')' : '')], ['incompletos', 'Sem RG/CPF/Pix'], ['bloqueados', 'Bloqueados']].map(function (f) {
+        return '<button class="chip' + (f[0] === fil ? ' on' : '') + '" data-fl="' + f[0] + '">' + f[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="search"><input type="text" id="q" placeholder="Buscar pelo nome…" aria-label="Buscar pessoa"></div><div id="lst" class="list"></div>';
     function des() {
       var ws = sem($('q').value).split(/\s+/).filter(Boolean);
-      var m = l.filter(function (x) { var n = sem(x.nome); return ws.every(function (w) { return n.indexOf(w) >= 0; }); }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt'); });
-      $('lst').innerHTML = m.length ? m.slice(0, 150).map(function (x) {
-        return '<button class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(x.nome) + '</div><div class="hint">' + esc([x.funcao, x.telefone].filter(Boolean).join(' · ') || 'sem telefone') + '</div></div></button>';
-      }).join('') : '<div class="empty">' + (l.length ? 'Ninguém com esse nome.' : 'Ninguém cadastrado ainda. Toque em “Importar lista” ou “+ Pessoa”.') + '</div>';
-      document.querySelectorAll('[data-pe]').forEach(function (b) { b.onclick = function () { ficha(l.filter(function (x) { return x.id === b.dataset.pe; })[0]); }; });
+      var m = l.filter(function (x) {
+        var n = sem(x.nome);
+        if (fil === 'novos' && !x.novo || fil === 'incompletos' && x.completo || fil === 'bloqueados' && !x.bloqueado) return false;
+        return ws.every(function (w) { return n.indexOf(w) >= 0; });
+      }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt'); });
+      $('lst').innerHTML = m.length ? m.slice(0, 200).map(function (x) {
+        return '<button class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(curto(x.nome)) + '</div><div class="hint">' + esc([x.funcao, x.telefone].filter(Boolean).join(' · ') || 'sem telefone') + (x.completo ? '' : ' · <span style="color:var(--bad)">cadastro incompleto</span>') + '</div></div>' +
+          (x.bloqueado ? '<span class="pill falta">Bloqueado</span>' : x.novo ? '<span class="pill montando">Novo</span>' : '') + '</button>';
+      }).join('') : '<div class="empty">' + (l.length ? 'Ninguém aqui.' : 'Ninguém cadastrado ainda. Mande o link de cadastro.') + '</div>';
+      document.querySelectorAll('[data-pe]').forEach(function (b) { b.onclick = function () { fichaCompleta(b.dataset.pe); }; });
     }
-    function ficha(x) {
-      x = x || { nome: '', telefone: '', funcao: '' };
-      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Pessoa"><h2>' + (x.id ? esc(x.nome) : 'Pessoa nova') + '</h2>' +
-        '<label class="f" for="pn1">Nome e sobrenome</label><input type="text" id="pn1" value="' + esc(x.nome) + '">' +
-        '<label class="f" for="pt1">Telefone (opcional)</label><input type="tel" id="pt1" value="' + esc(x.telefone) + '">' +
-        '<label class="f" for="pf1">Função (opcional)</label><input type="text" id="pf1" value="' + esc(x.funcao) + '" placeholder="Salão, Cozinha, Frete…">' +
-        '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px"><button class="btn primary" id="pok">Salvar</button>' + (x.id ? '<button class="btn danger" id="prm">Tirar do cadastro</button>' : '') + '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
-      $('m-fc').onclick = fecharModal;
-      function salvar(btn, ativo) {
-        fazer(btn, api('salvarEquipe', { pessoa: { id: x.id, nome: $('pn1').value, telefone: $('pt1').value, funcao: $('pf1').value, ativo: ativo } }), function () { fecharModal(); toast(ativo ? 'Salvo' : 'Tirado do cadastro'); render(); });
-      }
-      $('pok').onclick = function () { salvar(this, true); };
-      if ($('prm')) $('prm').onclick = function () { salvar(this, false); };
-    }
+    document.querySelectorAll('[data-fl]').forEach(function (b) { b.onclick = function () { S.p.novos = 0; S.p.fil = b.dataset.fl; V.equipe(); }; });
     $('q').oninput = des; des();
-    $('novo').onclick = function () { ficha(null); };
+    $('novo').onclick = function () { fichaCompleta(null); };
+    $('lcd').onclick = function () { linkCadastro(false); };
     if ($('imp')) $('imp').onclick = function () {
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Importar lista"><h2>Importar lista</h2><p class="sub">Uma pessoa por linha: <b>Nome Sobrenome; telefone; função</b>. Telefone e função são opcionais. Nomes já cadastrados são ignorados.</p>' +
         '<textarea id="it" style="min-height:200px"></textarea><div id="erro" class="err" hidden></div><div class="row" style="margin-top:14px"><button class="btn primary" id="iok">Importar</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
@@ -1371,14 +1423,38 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
   };
 
+  // Formulário público do link de cadastro (sem senha).
+  V.cadastro = function () {
+    header('Cadastro da equipe');
+    bar('');
+    if (S.p.feito) {
+      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">Cadastro enviado ✔</h2><p>Obrigado, ' + esc(S.p.feito) + '. A coordenação vai conferir seus dados.</p></div>';
+      return;
+    }
+    function campo(i, rot, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" required' + (extra || '') + '>'; }
+    $('app').innerHTML = demoAviso() + hero('Cadastro da equipe', MARCA.fotos.ident) +
+      '<h2>Seus dados</h2><p class="sub">Para trabalhar nos eventos da Gastrônomos. Os dados ficam só com a coordenação, para a escala e o pagamento.</p>' +
+      '<form id="f">' + campo('cn', 'Nome completo', 'text', ' autocomplete="name"') + campo('cr', 'RG') + campo('cc', 'CPF', 'text', ' inputmode="numeric" placeholder="000.000.000-00"') +
+      campo('ct', 'Telefone com DDD', 'tel', ' autocomplete="tel" placeholder="(11) 99999-9999"') + campo('cf', 'Função', 'text', ' list="funcoes" placeholder="Ex.: Garçom"') +
+      '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' + campo('cp', 'Chave Pix') +
+      '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
+    $('f').onsubmit = function (e) {
+      e.preventDefault();
+      var btn = $('ok'), nome = $('cn').value.trim(); btn.disabled = true; S.erro = ''; mostrarErro();
+      api('cadastroNovo', { token: null, chave: CAD, pessoa: { nome: nome, rg: $('cr').value, cpf: $('cc').value, telefone: $('ct').value, funcao: $('cf').value, pix: $('cp').value } })
+        .then(function () { S.p = { feito: nome.split(/\s+/)[0] }; window.scrollTo(0, 0); V.cadastro(); })
+        .catch(function (err) { S.erro = err.message; btn.disabled = false; mostrarErro(); });
+    };
+  };
+
   V.pessoas = function () {
     header('Equipe e senhas', true);
     bar('<button class="btn primary" id="novo">+ Cadastrar pessoa</button>');
     var ps = S.data.pessoas || [];
-    $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é Master (acesso total), quem cuida do estoque e quem monta a escala dos eventos. Coordenadores (maîtres) não usam senha: são marcados na equipe de cada evento.</p>' +
+    $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é Master (acesso total), quem cuida do estoque e quem faz a coordenação da equipe (cadastro e escala). Coordenadores (maîtres) não usam senha: são marcados na equipe de cada evento.</p>' +
       (ps.length ? '<div class="list">' + ps.map(function (p) {
         return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
-          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Master</span>' : '<span class="pill montando">' + [p.estoque ? 'Estoquista' : '', p.escala ? 'Escala' : ''].filter(Boolean).join(' + ') + '</span>') + '</button>';
+          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Master</span>' : '<span class="pill montando">' + [p.estoque ? 'Estoquista' : '', p.escala ? 'Coordenação' : '', !p.estoque && p.separa ? 'separa material' : ''].filter(Boolean).join(' + ') + '</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum estoquista cadastrado.</div>') +
       '<h2>Senha master</h2><p class="sub">Senha geral do Master. Dá acesso total.</p>' +
       '<label class="f" for="nm2">Nova senha master</label><input type="password" id="nm2" autocomplete="new-password">' +
@@ -1413,12 +1489,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<label class="f" for="pw">' + (S.p.id ? 'Nova senha pessoal (deixe vazio para manter)' : 'Senha pessoal') + '</label><input type="text" id="pw" autocomplete="off">' +
       '<label class="check"><input type="checkbox" id="crd"' + (p.coordenador ? ' checked' : '') + '> Master: acesso total e histórico</label>' +
       '<label class="check"><input type="checkbox" id="est"' + (p.estoque ? ' checked' : '') + '> Estoquista: inventário geral, grupos e itens, separação de material e contagem do mês</label>' +
-      '<label class="check"><input type="checkbox" id="esk"' + (p.escala ? ' checked' : '') + '> Monta a escala: equipe dos eventos e envio ao Montador</label>' +
+      '<label class="check"><input type="checkbox" id="esk"' + (p.escala ? ' checked' : '') + '> Coordenação da equipe: cadastro completo (RG, CPF, Pix), link de cadastro, bloqueios, equipe dos eventos e envio da escala ao Montador</label>' +
+      '<label class="check"><input type="checkbox" id="sep"' + (p.separa ? ' checked' : '') + '> Separar material (autorizado pelo Master): pode montar e fechar listas de material mesmo sem ser estoquista</label>' +
       '<label class="check"><input type="checkbox" id="atv"' + (p.ativo ? ' checked' : '') + '> Acesso liberado</label><div id="erro" class="err" hidden></div></form>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');
     $('cn').onclick = voltar;
     $('ok').onclick = function () {
-      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('est').checked, coordenador: $('crd').checked, estoque: $('est').checked, escala: $('esk').checked, ativo: $('atv').checked } }),
+      fazer(this, api('salvarPessoa', { pessoa: { id: S.p.id, nome: $('nm').value, telefone: $('tel').value, senha: $('pw').value, pode_inventario: $('est').checked, coordenador: $('crd').checked, estoque: $('est').checked, escala: $('esk').checked, separa: $('sep').checked, ativo: $('atv').checked } }),
         function () { toast('Salvo'); voltar(); });
     };
   };
@@ -1443,6 +1520,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   function render() {
     fecharModal();
+    if (CAD) { V.cadastro(); mostrarErro(); return; }
     if (!S.who || !S.token) { (S.view === 'ident' || !LINK ? V.ident : V.convite)(); return; }
     if (!S.data) { $('app').innerHTML = '<div class="loading">Carregando…</div>'; return; }
     (V[S.view] || V.inicio)();
@@ -1460,6 +1538,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   window.addEventListener('online', religar);
 
   S.who = ls('who'); S.token = ls('token');
+  if (CAD) { S.p = {}; render(); return; }
   // link de outro evento: quem não é da equipe confirma o nome de novo
   if (LINK && ls('convE') && ls('convE') !== LINK) { S.token = null; ls('token', null); ls('dados', null); }
   if (!S.who || !S.token) { render(); }

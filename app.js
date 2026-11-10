@@ -97,6 +97,8 @@ var CORE = (function () {
       var ev = porId(db.all('eventos'), s.pessoa_id.slice(3));
       if (!ev || !naLista(ev, s.nome)) return null;
       if (ev.status === 'concluido' && Date.now() - new Date(ev.concluido_em).getTime() > 3 * 86400000) return null;
+      var pq = naLista(ev, s.nome), eqx = pq.id ? porId(db.all('equipe'), pq.id) : null;
+      if (eqx && eqx.bloqueado === 'sim') return null;
       return { papel: 'prestador', evento_id: ev.id, nome: s.nome, telefone: s.telefone || '', coord: !!naLista(ev, s.nome).coord };
     }
     if (s.pessoa_id === 'master') return { papel: 'master', nome: 'Master', inventario: true, equipe: true, escala: true, estoque: true };
@@ -105,7 +107,8 @@ var CORE = (function () {
     if (sim(p.coordenador)) return { papel: 'master', nome: p.nome, id: p.id, inventario: true, equipe: true, escala: true, estoque: true };
     var est = p.estoque !== 'nao';
     // Estoquista: inventário geral, grupos, itens, separação, retorno e contagem (2026-11-10).
-    return { papel: est ? 'estoquista' : 'escala', nome: p.nome, id: p.id, inventario: est, equipe: true, escala: sim(p.escala), estoque: est };
+    // Coordenação da equipe (2026-11-10): cadastro da equipe e escala; lista de material só se o Master autorizar (separa).
+    return { papel: est ? 'estoquista' : 'escala', nome: p.nome, id: p.id, inventario: est, equipe: true, escala: sim(p.escala), estoque: est, separa: est || sim(p.separa) };
   }
 
   function log(db, quem, acao, detalhe) {
@@ -187,8 +190,8 @@ var CORE = (function () {
   function pedeCoord(s) { pedeEquipe(s); if (s.papel !== 'master') falha('Só o Master pode fazer isso.'); }
   // Lista de material de um evento: estoque/Master ou o coordenador (maître) marcado nesse evento.
   function pedeLista(s, conv, evId) {
-    if (s && s.estoque) return;
-    if (s) pedeEstoque(s);
+    if (s && (s.estoque || s.separa)) return;
+    if (s) falha('Separar material só com autorização do Master.');
     if (conv && conv.coord && conv.evento_id === evId) return;
     falha('Só o estoque ou o coordenador deste evento pode mexer na lista de material.');
   }
@@ -224,6 +227,22 @@ var CORE = (function () {
     });
   }
   function chaveNova() { return (uid() + uid()).replace(/[^a-z0-9]/g, '').slice(0, 14); }
+  // CPF com dígitos verificadores
+  function cpfOk(c) {
+    c = digitos(c); if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
+    for (var t = 9; t < 11; t++) {
+      var sm = 0; for (var i = 0; i < t; i++) sm += +c[i] * (t + 1 - i);
+      if (((sm * 10) % 11) % 10 !== +c[t]) return false;
+    }
+    return true;
+  }
+  function fmtCpf(c) { c = digitos(c); return c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9); }
+  function porCpf(db, cpf, exceto) { var d = digitos(cpf); return d ? db.all('equipe').filter(function (x) { return x.id !== exceto && digitos(x.cpf) === d; })[0] || null : null; }
+  // Dados pessoais (RG, CPF, Pix) não vão no carregar: só pela ficha, para a coordenação.
+  function resumoEquipe(x) {
+    return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', bloqueado: x.bloqueado === 'sim', motivo: x.bloqueado === 'sim' ? x.motivo_bloqueio || '' : '',
+      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix) };
+  }
   function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
   function acharNaEquipe(db, nome) {
     var alvo = partesNome(nome).join(' ');
@@ -303,12 +322,12 @@ var CORE = (function () {
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
         ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
-      if (s && !s.estoque) { out.itens = []; out.grupos = []; }
+      if (s && !s.estoque && !s.separa) { out.itens = []; out.grupos = []; }
       if (s && s.estoque) out.perdas = perdasPendentes(db);
-      if (s && s.escala) out.equipe = equipeAtiva(db).map(function (x) { return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '' }; });
+      if (s && s.escala) out.equipe = equipeAtiva(db).map(resumoEquipe);
       if (s && s.papel === 'master') {
         out.pessoas = db.all('pessoas').map(function (x) {
-          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador), escala: sim(x.escala), estoque: x.estoque !== 'nao' };
+          return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador), escala: sim(x.escala), estoque: x.estoque !== 'nao', separa: sim(x.separa) };
         });
         out.masterPadrao = !getConfig(db, 'master_hash');
       }
@@ -326,6 +345,11 @@ var CORE = (function () {
       if (!pr) {
         log(db, { nome: nome, telefone: tel }, 'Tentou abrir evento sem estar na lista', ev.nome);
         falha('Seu nome não está na lista deste evento. Confira nome e sobrenome ou fale com o Master.');
+      }
+      var bx = pr.id ? porId(db.all('equipe'), pr.id) : acharNaEquipe(db, pr.nome);
+      if (bx && bx.bloqueado === 'sim') {
+        log(db, { nome: nome, telefone: tel }, 'Tentou abrir evento estando bloqueado', ev.nome);
+        falha('Seu acesso está bloqueado. Fale com a coordenação.');
       }
       var lista = json(ev.prestadores, []);
       lista.forEach(function (x) { if (x === pr || (x.nome === pr.nome)) x.telefone = tel; });
@@ -346,23 +370,91 @@ var CORE = (function () {
       return { e: ev.id + '.' + ev.chave };
     },
 
+    // Cadastro da equipe: coordenação (escala) ou Master. Pessoa nova precisa de nome completo, RG, CPF e Pix.
     salvarEquipe: function (db, p, s, quem) {
       pedeEscala(s);
-      var x = p.pessoa || {}, nome = texto(x.nome, 80);
-      if (partesNome(nome).length < 2) falha('Informe nome e sobrenome.');
-      var dados = { nome: nome, telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), ativo: x.ativo === false ? 'nao' : 'sim' };
+      var x = p.pessoa || {}, nome = texto(x.nome, 120);
+      if (partesNome(nome).length < 2) falha('Informe o nome completo.');
+      var dados = { nome: nome, telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), ativo: x.ativo === false ? 'nao' : 'sim', atualizado_em: agora() };
+      if (x.rg !== undefined) dados.rg = texto(x.rg, 30);
+      if (x.cpf !== undefined) dados.cpf = texto(x.cpf, 20);
+      if (x.pix !== undefined) dados.pix = texto(x.pix, 120);
+      if (dados.cpf) { if (!cpfOk(dados.cpf)) falha('CPF inválido. Confira os números.'); dados.cpf = fmtCpf(dados.cpf); }
+      if (dados.cpf) { var dup = porCpf(db, dados.cpf, x.id); if (dup) falha('Esse CPF já está no cadastro de ' + dup.nome + '.'); }
+      if (x.revisado) dados.revisado = 'sim';
       if (x.id) {
         if (!porId(db.all('equipe'), x.id)) falha('Pessoa não encontrada.');
         db.update('equipe', x.id, dados);
-        log(db, quem, 'Alterou cadastro da equipe de eventos', nome + (dados.ativo === 'nao' ? ' (desativado)' : ''));
+        log(db, quem, 'Alterou cadastro da equipe de eventos', nome + (dados.ativo === 'nao' ? ' (tirado do cadastro)' : ''));
         return { id: x.id };
       }
+      if (!dados.rg || !dados.cpf || !dados.pix) falha('Para cadastrar pessoa nova informe nome completo, RG, CPF e chave Pix. Ou mande o link de cadastro para ela preencher.');
       var ja = acharNaEquipe(db, nome);
-      if (ja) { db.update('equipe', ja.id, dados); return { id: ja.id }; }
-      dados.id = uid(); dados.criado_em = agora();
+      if (ja && !ja.cpf) { db.update('equipe', ja.id, dados); log(db, quem, 'Completou cadastro da equipe de eventos', nome); return { id: ja.id }; }
+      dados.id = uid(); dados.criado_em = agora(); dados.origem = 'manual'; dados.revisado = 'sim';
       db.insert('equipe', dados);
       log(db, quem, 'Cadastrou na equipe de eventos', nome);
       return { id: dados.id };
+    },
+
+    fichaEquipe: function (db, p, s, quem) {
+      pedeEscala(s);
+      var x = porId(db.all('equipe'), p.id);
+      if (!x) falha('Pessoa não encontrada.');
+      log(db, quem, 'Consultou cadastro completo', x.nome);
+      return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', rg: x.rg || '', cpf: x.cpf || '', pix: x.pix || '',
+        bloqueado: x.bloqueado === 'sim', motivo: x.motivo_bloqueio || '', bloqueado_por: x.bloqueado_por || '', origem: x.origem || '', novo: x.origem === 'link' && x.revisado !== 'sim',
+        criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '' };
+    },
+
+    bloquearEquipe: function (db, p, s, quem) {
+      pedeEscala(s);
+      var x = porId(db.all('equipe'), p.id);
+      if (!x) falha('Pessoa não encontrada.');
+      if (p.bloquear) {
+        var mot = texto(p.motivo, 500);
+        if (mot.length < 3) falha('Escreva a justificativa do bloqueio.');
+        db.update('equipe', x.id, { bloqueado: 'sim', motivo_bloqueio: mot, bloqueado_por: texto(p.who && p.who.nome, 80) + ' em ' + agora().slice(0, 10) });
+        log(db, quem, 'Bloqueou pessoa da equipe', x.nome + ' — ' + mot);
+      } else {
+        db.update('equipe', x.id, { bloqueado: '', motivo_bloqueio: '', bloqueado_por: '' });
+        log(db, quem, 'Desbloqueou pessoa da equipe', x.nome);
+      }
+      return true;
+    },
+
+    // Link de cadastro para pessoas novas preencherem os próprios dados. "nova" troca a chave e o link antigo para de funcionar.
+    linkCadastro: function (db, p, s, quem) {
+      pedeEscala(s);
+      var k = getConfig(db, 'cadastro_chave');
+      if (!k || p.nova) { k = chaveNova(); setConfig(db, 'cadastro_chave', k); if (p.nova) log(db, quem, 'Gerou novo link de cadastro', 'o link anterior deixou de funcionar'); }
+      return { chave: k };
+    },
+
+    cadastroNovo: function (db, p, s, quem) {
+      var k = getConfig(db, 'cadastro_chave');
+      if (!k || texto(p.chave, 40) !== k) falha('Link de cadastro inválido ou antigo. Peça o link novo à coordenação.');
+      var x = p.pessoa || {}, nome = texto(x.nome, 120).replace(/\s+/g, ' ');
+      var d = { nome: nome, rg: texto(x.rg, 30), cpf: texto(x.cpf, 20), telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), pix: texto(x.pix, 120) };
+      if (partesNome(nome).length < 2) falha('Digite seu nome completo.');
+      if (d.rg.replace(/[^0-9a-z]/gi, '').length < 5) falha('Digite seu RG.');
+      if (!cpfOk(d.cpf)) falha('CPF inválido. Confira os números.');
+      if (digitos(d.telefone).length < 10) falha('Digite o telefone com DDD.');
+      if (!d.funcao) falha('Informe sua função.');
+      if (d.pix.length < 5) falha('Digite sua chave Pix.');
+      d.cpf = fmtCpf(d.cpf);
+      var quemC = { nome: nome + ' [cadastro pelo link]', telefone: d.telefone };
+      var ja = porCpf(db, d.cpf);
+      if (ja && ja.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
+      if (ja) falha('Esse CPF já tem cadastro. Para alterar seus dados, fale com a coordenação.');
+      var mesmo = acharNaEquipe(db, nome);
+      if (mesmo && mesmo.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
+      d.ativo = 'sim'; d.origem = 'link'; d.revisado = ''; d.atualizado_em = agora();
+      if (mesmo && !mesmo.cpf) { db.update('equipe', mesmo.id, d); log(db, quemC, 'Completou o próprio cadastro pelo link', nome); return true; }
+      d.id = uid(); d.criado_em = agora();
+      db.insert('equipe', d);
+      log(db, quemC, 'Fez o próprio cadastro pelo link', nome);
+      return true;
     },
 
     importarEquipe: function (db, p, s, quem) {
@@ -539,7 +631,7 @@ var CORE = (function () {
       pedeEquipe(s);
       var e = p.evento || {}, antigo = e.id ? porId(db.all('eventos'), e.id) : null;
       if (e.id && !antigo) falha('Evento não encontrado.');
-      if (!antigo && s.papel !== 'master' && !(s.estoque && texto(e.agenda_id, 300))) falha('Só o Master cria eventos. O estoque abre a separação pelos eventos da agenda.');
+      if (!antigo && s.papel !== 'master' && !((s.estoque || s.escala) && texto(e.agenda_id, 300))) falha('Só o Master cria eventos. Os outros abrem pelos eventos da agenda.');
       if (antigo && s.papel !== 'master') ['nome', 'data', 'local', 'obs', 'hora_inicio', 'hora_fim'].forEach(function (k) { e[k] = antigo[k] || ''; });
       var nome = texto(e.nome, 120);
       if (!nome) falha('Dê um nome ao evento.');
@@ -553,6 +645,8 @@ var CORE = (function () {
         if (partesNome(x.nome).length < 2) falha('Informe nome e sobrenome de ' + x.nome + '.');
         var c = x.id ? porId(db.all('equipe'), x.id) : null;
         if (!c) { c = incluirNaEquipe(db, x.nome, x.telefone, '', quem); x.id = c.id; }
+        if (c.bloqueado === 'sim' && !(antigo && json(antigo.prestadores, []).some(function (o) { return o.id === c.id; })))
+          falha(c.nome + ' está bloqueado(a): ' + (c.motivo_bloqueio || 'sem justificativa') + '.');
         if (!x.telefone) x.telefone = c.telefone || '';
       });
       var dados = { nome: nome, data: texto(e.data, 20), local: texto(e.local, 200), obs: texto(e.obs, 500),
@@ -629,7 +723,7 @@ var CORE = (function () {
     },
 
     reabrirMontagem: function (db, p, s, quem, conv) {
-      pedeLista(s, conv, p.id);
+      if (!(s && s.escala)) pedeLista(s, conv, p.id);
       var ev = porId(db.all('eventos'), p.id);
       if (!ev || ev.status !== 'em_evento') falha('Só dá para reabrir um evento que saiu e ainda não voltou.');
       db.update('eventos', ev.id, { status: 'montando' });
@@ -734,7 +828,7 @@ var CORE = (function () {
       var nome = texto(x.nome, 80);
       if (!nome) falha('Informe o nome do estoquista.');
       var dados = { nome: nome, telefone: texto(x.telefone, 30), pode_inventario: sim(x.pode_inventario) ? 'sim' : 'nao', coordenador: sim(x.coordenador) ? 'sim' : 'nao',
-        escala: sim(x.escala) ? 'sim' : 'nao', estoque: x.estoque === false ? 'nao' : 'sim', ativo: x.ativo === false ? 'nao' : 'sim' };
+        escala: sim(x.escala) ? 'sim' : 'nao', estoque: x.estoque === false ? 'nao' : 'sim', separa: sim(x.separa) ? 'sim' : 'nao', ativo: x.ativo === false ? 'nao' : 'sim' };
       if (dados.estoque === 'nao' && dados.escala === 'nao' && dados.coordenador === 'nao') falha('Marque pelo menos uma função: estoque, escala ou Master.');
       var senha = texto(x.senha, 100);
       if (senha) {
@@ -770,7 +864,8 @@ var CORE = (function () {
     },
 
     listarAgenda: function (db, p, s) {
-      pedeEstoque(s);
+      pedeEquipe(s);
+      if (!s.estoque && !s.escala) pedeEstoque(s);
       if (!db.agenda) falha('A Agenda não está ligada.');
       var usados = {};
       db.all('eventos').forEach(function (e) { if (e.agenda_id) usados[e.agenda_id] = e.id; });
@@ -842,9 +937,9 @@ var CORE = (function () {
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
-    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque'],
+    pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
-    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em'],
+    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em'],
     escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
@@ -877,7 +972,9 @@ function configurarApp_() {
 // Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
 // (estado), poupando uma segunda ida ao servidor.
 var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
-var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1, fichaEquipe: 1, linkCadastro: 1, cadastroNovo: 1 };
+// RG, CPF e Pix não ficam guardados no cache de repetição
+var SEM_CACHE_ = { fichaEquipe: 1 };
 function apiApp_(acao, payload) {
   var lock = LockService.getScriptLock(), travado = false;
   function travar() { if (!travado) { lock.waitLock(20000); travado = true; } }
@@ -885,7 +982,7 @@ function apiApp_(acao, payload) {
     var leitura = !!LEITURAS_[acao];
     if (!leitura) travar();
     // Sinal ruim: o celular pode reenviar o mesmo pedido. O código do pedido (rid) evita gravar duas vezes.
-    var rid = !leitura && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
+    var rid = !leitura && !SEM_CACHE_[acao] && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
     if (rid) { var ja = cache.get(rid); if (ja) return JSON.parse(ja); }
     var db = novoDb_(); db.travar = travar;
     var r = { ok: true, data: CORE.handle(db, acao, payload) };

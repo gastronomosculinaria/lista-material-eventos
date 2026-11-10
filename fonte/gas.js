@@ -22,7 +22,9 @@ function configurar() {
 // Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
 // (estado), poupando uma segunda ida ao servidor.
 var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
-var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1, fichaEquipe: 1, linkCadastro: 1, cadastroNovo: 1 };
+// RG, CPF e Pix não ficam guardados no cache de repetição
+var SEM_CACHE_ = { fichaEquipe: 1 };
 function api(acao, payload) {
   var lock = LockService.getScriptLock(), travado = false;
   function travar() { if (!travado) { lock.waitLock(20000); travado = true; } }
@@ -30,7 +32,7 @@ function api(acao, payload) {
     var leitura = !!LEITURAS_[acao];
     if (!leitura) travar();
     // Sinal ruim: o celular pode reenviar o mesmo pedido. O código do pedido (rid) evita gravar duas vezes.
-    var rid = !leitura && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
+    var rid = !leitura && !SEM_CACHE_[acao] && payload && payload.rid ? 'rid_' + String(payload.rid).slice(0, 40) : '', cache = CacheService.getScriptCache();
     if (rid) { var ja = cache.get(rid); if (ja) return JSON.parse(ja); }
     var db = novoDb_(); db.travar = travar;
     var r = { ok: true, data: CORE.handle(db, acao, payload) };
