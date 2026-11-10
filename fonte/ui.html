@@ -288,13 +288,14 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function evento(id) { return (S.data.eventos || []).filter(function (e) { return e.id === id; })[0]; }
   function digitos(s) { return String(s || '').replace(/\D/g, ''); }
   function souPrestador(ev) { var c = S.data.convite; return !!(c && c.evento_id === ev.id); }
+  function podeLista(ev) { return !!(sess() || (souPrestador(ev) && S.data.convite.coord)); }
   function sem(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
   function header(titulo, podeVoltar) {
     var s = sess();
     $('hdr').innerHTML = (podeVoltar ? '<button class="back" id="bk" aria-label="Voltar">←</button>' : '<span style="width:4px"></span>') +
       '<h1>' + esc(titulo) + '</h1>' +
-      (S.who ? '<div class="who">' + esc(S.who.nome) + (s ? '<br>' + (s.papel === 'coordenador' ? 'Coordenação' : 'Estoquista') : S.data && S.data.convite ? '<br>Equipe do evento' : '') + '</div>' : '');
+      (S.who ? '<div class="who">' + esc(S.who.nome) + (s ? '<br>' + (s.papel === 'master' ? 'Master' : 'Estoquista') : S.data && S.data.convite ? '<br>' + (S.data.convite.coord ? 'Coordenador do evento' : 'Equipe do evento') : '') + '</div>' : '');
     if (podeVoltar) $('bk').onclick = voltar;
   }
   function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
@@ -315,7 +316,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     header('Material de Eventos');
     bar('');
     $('app').innerHTML = demoAviso() + hero('Material de Eventos', MARCA.fotos.ident) +
-      '<h2>Área da equipe</h2><p class="sub">Coordenação e estoquistas. Quem vai trabalhar num evento entra pelo <b>link do evento</b> enviado no grupo do WhatsApp.</p>' +
+      '<h2>Área da equipe</h2><p class="sub">Master e estoquistas. Coordenadores e equipe do evento entram pelo <b>link do evento</b> enviado no grupo do WhatsApp.</p>' +
       '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
       '<label class="f" for="pw">Senha</label><input type="password" id="pw" autocomplete="current-password" required>' +
@@ -342,7 +343,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
       '<p class="hint" style="margin-top:6px">O telefone fica só para registro.</p>' +
       '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Abrir o evento</button></form>' +
-      '<p class="hint" style="margin-top:22px">É da coordenação ou estoque? <a href="#" id="eq">Entrar com senha</a></p>';
+      '<p class="hint" style="margin-top:22px">É Master ou do estoque? <a href="#" id="eq">Entrar com senha</a></p>';
     $('eq').onclick = function (e) { e.preventDefault(); S.view = 'ident'; V.ident(); };
     $('f').onsubmit = function (e) {
       e.preventDefault();
@@ -363,7 +364,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var ativos = d.eventos.filter(function (e) { return e.status !== 'concluido'; });
     var h = demoAviso() + hero('Olá, ' + S.who.nome.split(' ')[0], MARCA.fotos.inicio);
     if (!s) {
-      $('app').innerHTML = h + '<h2>Seu evento</h2>' + (d.eventos.length ? '<div class="list">' + d.eventos.map(function (e) {
+      var meus = d.eventos.filter(function (e) { return !e.outro; });
+      $('app').innerHTML = h + '<h2>Seu evento</h2>' + (meus.length ? '<div class="list">' + meus.map(function (e) {
         return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span></button>';
       }).join('') + '</div>' : '<div class="empty">Este evento não está mais disponível.</div>') +
         '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p>';
@@ -378,14 +380,16 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var uc = d.ultimaContagem;
       h += '<button class="tile" id="t-cnt"><b>Contagem</b><span>' + (uc ? 'Última em ' + quando(uc.em).split(',')[0] + (uc.diferencas ? ' · ' + uc.diferencas + ' diferenças' : '') : 'Conferir o depósito') + '</span></button>';
       h += '<button class="tile" id="t-eq"><b>Equipe de eventos</b><span class="big">' + (d.equipe || []).length + '</span><span>pessoas cadastradas</span></button>';
-      if (s.papel === 'coordenador') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
+      if (s.papel === 'master') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
         '<button class="tile" id="t-his"><b>Histórico</b><span>Quem acessou e o que mudou</span></button>';
-      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'coordenador' ? 'Coordenação' + (s.id ? ' · ' + s.nome : '') : 'Estoquista ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
+      h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'master' ? 'Master' + (s.id ? ' · ' + s.nome : '') : 'Estoquista ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
     }
     h += '</div>';
     if (d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 16 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 17 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
+    var np = (d.perdas || []).length;
+    if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
     $('t-inv').onclick = function () { ir('inventario'); };
     $('t-ev').onclick = function () { ir('eventos'); };
@@ -393,6 +397,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if ($('t-cnt')) $('t-cnt').onclick = function () { ir('contagem'); };
     if ($('t-his')) $('t-his').onclick = function () { ir('historico'); };
     $('t-eq').onclick = function () { ir('equipe'); };
+    if ($('t-pd')) $('t-pd').onclick = function () { ir('perdas'); };
     $('t-out').onclick = function () { api('sair').catch(function () {}); sairDeTudo(); toast('Você saiu da área da equipe'); render(); };
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
     if ($('agh')) api('listarAgenda').then(function (l) {
@@ -462,7 +467,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = busca() +
       (s && s.inventario ? '<div class="tools"><button class="btn" id="org">Organizar grupos</button><button class="btn" id="vrs">Cadastrar vários</button><button class="btn" id="etq">Etiquetas QR</button></div>' : '') +
       '<div id="lst"></div>' +
-      (s && !s.inventario ? '<p class="hint" style="margin-top:16px">Sua senha não permite incluir ou excluir itens. A coordenação libera isso em Equipe e senhas.</p>' : '') +
+      (s && !s.inventario ? '<p class="hint" style="margin-top:16px">Sua senha não permite incluir ou excluir itens. O Master libera isso em Equipe e senhas.</p>' : '') +
       (!s ? '<p class="hint" style="margin-top:16px">Para cadastrar itens, entre na Área da equipe.</p>' : '');
     function desenhar() {
       var l = filtrar(S.data.itens).sort(function (a, b) { return cmpNome(a, b); });
@@ -841,11 +846,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var c = S.p.agenda;
     var e = S.p.id ? evento(S.p.id) : c ? { nome: c.titulo, data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [] }
       : { nome: '', data: '', local: '', obs: '', hora_inicio: '', hora_fim: '', prestadores: [] };
-    var prest = e.prestadores.map(function (p) { return { id: p.id || '', nome: p.nome, telefone: p.telefone || '' }; });
+    var prest = e.prestadores.map(function (p) { return { id: p.id || '', nome: p.nome, telefone: p.telefone || '', coord: !!p.coord }; });
     header(S.p.id ? 'Editar evento' : 'Novo evento', true);
     function linhasPrest() {
-      return prest.length ? '<div class="chips w">' + prest.map(function (p, k) {
-        return '<button type="button" class="chip on" data-px="' + k + '" aria-label="Tirar ' + esc(p.nome) + '">' + esc(p.nome) + ' ×</button>';
+      return prest.length ? '<div class="list">' + prest.map(function (p, k) {
+        return '<div class="li static" style="padding:8px 10px"><div class="mid"><div class="nm">' + esc(p.nome) + '</div></div>' +
+          '<button type="button" class="chip' + (p.coord ? ' on' : '') + '" data-pc="' + k + '" aria-pressed="' + !!p.coord + '">Coordenador</button>' +
+          '<button type="button" class="chip" data-px="' + k + '" aria-label="Tirar ' + esc(p.nome) + '">×</button></div>';
       }).join('') + '</div>' : '<p class="hint">Ninguém marcado ainda.</p>';
     }
     $('app').innerHTML = '<form id="f"><label class="f" for="nm">Nome do evento</label><input type="text" id="nm" value="' + esc(e.nome) + '" placeholder="Ex.: Casamento Ana e Pedro" required>' +
@@ -855,13 +862,14 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<label class="f" for="lc">Local</label><input type="text" id="lc" value="' + esc(e.local) + '">' +
       (S.data.agenda ? '<p class="hint">' + (c ? 'Este evento fica ligado ao compromisso da sua agenda. A lista de material aparece na descrição dele.'
         : 'O evento aparece na sua Agenda Google com a lista de material na descrição. Sem horário, entra como dia inteiro.') + '</p>' : '') +
-      '<label class="f" for="pq">Equipe do evento (' + '<span id="pn">' + prest.length + '</span>)</label><p class="hint" style="margin-top:0">Só quem estiver marcado aqui abre o evento pelo link do grupo, confirmando nome e sobrenome.</p>' +
+      '<label class="f" for="pq">Equipe do evento (' + '<span id="pn">' + prest.length + '</span>)</label><p class="hint" style="margin-top:0">Só quem estiver marcado aqui abre o evento pelo link do grupo, confirmando nome e sobrenome. O <b>Coordenador</b> (maître do dia) também separa, fecha e reabre a lista deste evento.</p>' +
       '<div id="pl">' + linhasPrest() + '</div><input type="text" id="pq" placeholder="Buscar pessoa para marcar…" autocomplete="off"><div id="pr" class="list" style="margin-top:6px"></div>' +
       '<label class="f" for="ob">Observações (opcional)</label><textarea id="ob">' + esc(e.obs) + '</textarea><div id="erro" class="err" hidden></div></form>';
     function sync() {}
     function ligar() {
       $('pl').innerHTML = linhasPrest(); $('pn').textContent = prest.length;
       document.querySelectorAll('[data-px]').forEach(function (b) { b.onclick = function () { prest.splice(+b.dataset.px, 1); ligar(); }; });
+      document.querySelectorAll('[data-pc]').forEach(function (b) { b.onclick = function () { var p = prest[+b.dataset.pc]; p.coord = !p.coord; ligar(); }; });
     }
     function achar() {
       var q = sem($('pq').value).trim(), ws = q.split(/\s+/).filter(Boolean), ja = {};
@@ -903,7 +911,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var h = (s ? '<div class="tools" style="margin-bottom:10px"><button class="btn primary" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span><span class="hint">' + pecas + ' peças</span></div>' +
       '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
       (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
-      '<dt>Equipe</dt><dd>' + (e.prestadores.length ? e.prestadores.map(function (p) { return esc(p.nome) + (s && p.telefone ? ' · ' + esc(p.telefone) : ''); }).join('<br>') : 'ninguém marcado') + '</dd>' +
+      '<dt>Equipe</dt><dd>' + (e.prestadores.length ? e.prestadores.map(function (p) { return esc(p.nome) + (p.coord ? ' <b>(coordenador)</b>' : '') + (s && p.telefone ? ' · ' + esc(p.telefone) : ''); }).join('<br>') : 'ninguém marcado') + '</dd>' +
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
       (e.separado_por ? '<dt>Saída</dt><dd>Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span></dd>' : '') +
       (e.status === 'concluido' ? '<dt>Retorno</dt><dd>' + esc(e.retorno_por) + (e.conferido_retorno ? '<br><span class="hint">Conferido por ' + esc(e.conferido_retorno) + '</span>' : '') + '<br><span class="hint">' + quando(e.concluido_em) + '</span></dd>' : '') +
@@ -919,7 +927,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var ret = l.qtd_retorno != null, falt = ret && l.qtd_retorno < l.qtd_saida;
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(it)) + '</div>' +
         '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
-        (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) + '</div>' : '') + '</div>' +
+        (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
+          ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' : '') + '</div>' +
         (falt ? '<span class="pill falta">−' + (l.qtd_saida - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
     }
     if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
@@ -929,9 +938,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }).join('');
     if (s && e.status !== 'concluido') h += '<div class="row" style="margin-top:22px"><button class="btn" id="ed">Editar dados e equipe</button>' +
       (e.status === 'montando' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '<button class="btn" id="reab">Reabrir lista</button>') + '</div><div id="mx"></div>';
+    else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
-    if (e.status === 'montando' && s) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Fechar lista</button>' : ''));
+    if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Fechar lista</button>' : ''));
     else if (podeRet) bar('<button class="btn primary" id="rt">Registrar retorno</button>');
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
@@ -1153,7 +1163,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = '<p class="sub">Conte o que está no depósito agora e digite ao lado de cada item. O que saiu para eventos já é descontado.' +
       (uc ? ' Última contagem: ' + quando(uc.em) + (uc.por ? ' por ' + esc(uc.por) : '') + '.' : '') + '</p>' +
       (s.inventario ? '<label class="check"><input type="checkbox" id="aj" checked> Corrigir o estoque com os números contados</label>'
-        : '<p class="hint">Sua senha não corrige o estoque: a contagem fica registrada para a coordenação.</p>') +
+        : '<p class="hint">Sua senha não corrige o estoque: a contagem fica registrada para o Master.</p>') +
       busca() + '<div class="tools"><button class="btn" id="qr">📷 Ler QR (soma 1 por leitura)</button></div><div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
     function difTxt(i) {
       var v = C[i.id]; if (v === '' || v == null) return '';
@@ -1233,10 +1243,41 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
   };
 
+  V.perdas = function () {
+    var l = S.data.perdas || [];
+    header('Perdas para confirmar', true);
+    bar('');
+    $('app').innerHTML = '<p class="sub">Material que voltou a menos. Confirme a perda para dar baixa no inventário, ou marque como encontrado.</p>' +
+      (l.length ? '<div class="list">' + l.map(function (x, k) {
+        return '<div class="li static" style="flex-wrap:wrap"><div class="mid" style="flex:1 1 200px"><div class="nm">' + x.falta + ' × ' + esc(x.nome) + '</div><div class="hint">' + esc(x.evento) + ' · ' + dataBR(x.data) + '<br>' +
+          esc([x.motivo, x.justificativa].filter(Boolean).join(' — ')) + (x.custo ? ' · ' + moeda(x.custo) : '') + '</div></div>' +
+          '<div class="row" style="flex:1 1 100%"><button class="btn" data-pn="' + k + '">Foi encontrado</button><button class="btn danger" data-ps="' + k + '">Confirmar perda</button></div></div>';
+      }).join('') + '</div>' : '<div class="empty">Nenhuma perda esperando confirmação.</div>') + '<div id="erro" class="err" hidden></div>';
+    function modal(t, corpo, botao, ok) {
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="' + esc(t) + '"><h2>' + esc(t) + '</h2>' + corpo +
+        '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px"><button class="btn danger" id="mok">' + botao + '</button><button class="btn" id="m-fc">Cancelar</button></div></div></div>';
+      $('m-fc').onclick = fecharModal; $('mok').onclick = ok;
+    }
+    document.querySelectorAll('[data-pn]').forEach(function (b) {
+      b.onclick = function () { var x = l[+b.dataset.pn]; fazer(b, api('confirmarPerda', { id: x.id, confirmar: false }), function () { toast('Marcado como encontrado'); render(); }); };
+    });
+    document.querySelectorAll('[data-ps]').forEach(function (b) {
+      b.onclick = function () {
+        var x = l[+b.dataset.ps];
+        modal('Confirmar perda', '<p>' + x.falta + ' × <b>' + esc(x.nome) + '</b> não voltaram de ' + esc(x.evento) + '.</p><p class="hint">Motivo: ' + esc([x.motivo, x.justificativa].filter(Boolean).join(' — ') || 'não informado') + '</p>', 'Sim, foi perda', function () {
+          modal('Excluir do inventário?', '<p><b>' + (x.equipamento ? esc(x.nome) + ' será excluído' : x.falta + (x.falta > 1 ? ' unidades' : ' unidade') + ' de ' + esc(x.nome) + (x.falta > 1 ? ' serão excluídas' : ' será excluída')) +
+            ' permanentemente do Inventário Geral.</b></p><p class="hint">' + (x.equipamento ? '' : 'Estoque passa de ' + x.estoque + ' para ' + Math.max(0, x.estoque - x.falta) + '. ') + 'Isso não pode ser desfeito.</p>', 'Excluir do inventário', function () {
+            fazer(this, api('confirmarPerda', { id: x.id, confirmar: true }), function () { fecharModal(); toast('Perda confirmada e baixa feita'); render(); });
+          });
+        });
+      };
+    });
+  };
+
   V.equipe = function () {
     var s = sess(), l = S.data.equipe || [];
     header('Equipe de eventos', true);
-    bar((s.papel === 'coordenador' ? '<button class="btn" id="imp">Importar lista</button>' : '') + '<button class="btn primary" id="novo">+ Pessoa</button>');
+    bar((s.papel === 'master' ? '<button class="btn" id="imp">Importar lista</button>' : '') + '<button class="btn primary" id="novo">+ Pessoa</button>');
     $('app').innerHTML = '<p class="sub">' + l.length + ' pessoas. Marque quem vai em cada evento na tela do evento.</p><div class="search"><input type="text" id="q" placeholder="Buscar pelo nome…" aria-label="Buscar pessoa"></div><div id="lst" class="list"></div>';
     function des() {
       var ws = sem($('q').value).split(/\s+/).filter(Boolean);
@@ -1274,12 +1315,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     header('Equipe e senhas', true);
     bar('<button class="btn primary" id="novo">+ Cadastrar pessoa</button>');
     var ps = S.data.pessoas || [];
-    $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é da coordenação (acesso total) e quem pode incluir e excluir itens do inventário.</p>' +
+    $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é Master (acesso total) e quem pode incluir e excluir itens do inventário. Coordenadores (maîtres) não usam senha: são marcados na equipe de cada evento.</p>' +
       (ps.length ? '<div class="list">' + ps.map(function (p) {
         return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
-          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Coordenação</span>' : p.pode_inventario ? '<span class="pill concluido">Mexe no inventário</span>' : '<span class="pill montando">Só eventos</span>') + '</button>';
+          (!p.ativo ? '<span class="pill falta">Bloqueado</span>' : p.coordenador ? '<span class="pill em_evento">Master</span>' : p.pode_inventario ? '<span class="pill concluido">Mexe no inventário</span>' : '<span class="pill montando">Só eventos</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum estoquista cadastrado.</div>') +
-      '<h2>Senha master</h2><p class="sub">Usada pelos coordenadores. Dá acesso total.</p>' +
+      '<h2>Senha master</h2><p class="sub">Senha geral do Master. Dá acesso total.</p>' +
       '<label class="f" for="nm2">Nova senha master</label><input type="password" id="nm2" autocomplete="new-password">' +
       '<div style="height:10px"></div><button class="btn block" id="tm">Trocar senha master</button><div id="erro" class="err" hidden></div>' +
       (S.data.agenda ? '<h2>Agenda dos eventos</h2><div id="agc"><div class="loading">Lendo agendas…</div></div>' : '');
@@ -1310,7 +1351,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = '<form id="f"><label class="f" for="nm">Nome</label><input type="text" id="nm" value="' + esc(p.nome) + '" required>' +
       '<label class="f" for="tel">Telefone</label><input type="tel" id="tel" value="' + esc(p.telefone) + '">' +
       '<label class="f" for="pw">' + (S.p.id ? 'Nova senha pessoal (deixe vazio para manter)' : 'Senha pessoal') + '</label><input type="text" id="pw" autocomplete="off">' +
-      '<label class="check"><input type="checkbox" id="crd"' + (p.coordenador ? ' checked' : '') + '> Coordenação: acesso total, como a senha master</label>' +
+      '<label class="check"><input type="checkbox" id="crd"' + (p.coordenador ? ' checked' : '') + '> Master: acesso total e histórico</label>' +
       '<label class="check"><input type="checkbox" id="inv"' + (p.pode_inventario ? ' checked' : '') + '> Pode incluir, editar e excluir itens do inventário</label>' +
       '<label class="check"><input type="checkbox" id="atv"' + (p.ativo ? ' checked' : '') + '> Acesso liberado</label><div id="erro" class="err" hidden></div></form>';
     bar('<button class="btn" id="cn">Cancelar</button><button class="btn primary" id="ok">Salvar</button>');

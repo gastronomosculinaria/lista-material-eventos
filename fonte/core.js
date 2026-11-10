@@ -26,9 +26,11 @@ var CORE = (function () {
     { id: "planilha-cafe-2026-11-07", grupo: "Caixa de secos", subgrupo: "Café", itens: ["Açúcar", "Adoçante liquido", "Adoçante sachê", "Grão de café decoração", "Chá - quando tiver mesa de chá e café"] },
     { id: "planilha-limpeza-2026-11-07", grupo: "Caixa de limpeza", subgrupo: "", itens: ["Plástico filme", "Perfex", "Pano de limpeza", "Papel toalha", "Saco de lixo", "Alcool", "Detergente", "Guardanapo", "Jarras de apoio", "Sabão em pasta", "Esponja", "Bombril", "Touca + Luva", "Palitos quando for stick", "Bombonas azuis"] }
   ];
+  // Itens excluídos por engano que o usuário pediu de volta (uma vez).
+  var RESTAURAR = [{ id: 'restaurar-abacaxi-2026-11-10', nome: 'Abacaxi de cristal', grupo: 'Material' }];
   function aplicarPacotes(db) {
     var feitos = json(getConfig(db, 'pacotes'), []), mudou = false;
-    if (PACOTES.every(function (pc) { return feitos.indexOf(pc.id) >= 0; })) return;
+    if (PACOTES.concat(RESTAURAR).every(function (pc) { return feitos.indexOf(pc.id) >= 0; })) return;
     if (db.travar) { db.travar(); if (db.esquecer) db.esquecer('config'); feitos = json(getConfig(db, 'pacotes'), []); }
     PACOTES.forEach(function (pc) {
       if (feitos.indexOf(pc.id) >= 0) return;
@@ -42,6 +44,17 @@ var CORE = (function () {
         log(db, { nome: 'Sistema', telefone: '' }, 'Incluiu itens sugeridos', pc.grupo + (pc.subgrupo ? ' / ' + pc.subgrupo : '') + ': ' + novos.map(function (n) { return n.nome; }).join(', '));
       }
       feitos.push(pc.id); mudou = true;
+    });
+    RESTAURAR.forEach(function (r) {
+      if (feitos.indexOf(r.id) >= 0) return;
+      var mesmos = db.all('itens').filter(function (i) { return String(i.nome).trim().toLowerCase() === r.nome.toLowerCase(); });
+      if (!mesmos.some(function (i) { return sim(i.ativo); })) {
+        var ult = mesmos[mesmos.length - 1];
+        if (ult) db.update('itens', ult.id, { ativo: 'sim' });
+        else db.insert('itens', { id: uid(), nome: r.nome, categoria: r.grupo, descricao: '', foto: '', grupo: r.grupo, subgrupo: '', qtd_total: '0', ativo: 'sim', criado_em: agora() });
+        log(db, { nome: 'Sistema', telefone: '' }, 'Devolveu item ao inventário', r.nome + ' (pedido da coordenação)');
+      }
+      feitos.push(r.id); mudou = true;
     });
     if (mudou) setConfig(db, 'pacotes', JSON.stringify(feitos));
   }
@@ -84,12 +97,12 @@ var CORE = (function () {
       var ev = porId(db.all('eventos'), s.pessoa_id.slice(3));
       if (!ev || !naLista(ev, s.nome)) return null;
       if (ev.status === 'concluido' && Date.now() - new Date(ev.concluido_em).getTime() > 3 * 86400000) return null;
-      return { papel: 'prestador', evento_id: ev.id, nome: s.nome, telefone: s.telefone || '' };
+      return { papel: 'prestador', evento_id: ev.id, nome: s.nome, telefone: s.telefone || '', coord: !!naLista(ev, s.nome).coord };
     }
-    if (s.pessoa_id === 'master') return { papel: 'coordenador', nome: 'Coordenação', inventario: true, equipe: true };
+    if (s.pessoa_id === 'master') return { papel: 'master', nome: 'Master', inventario: true, equipe: true };
     var p = porId(db.all('pessoas'), s.pessoa_id);
     if (!p || !sim(p.ativo)) return null;
-    if (sim(p.coordenador)) return { papel: 'coordenador', nome: p.nome, id: p.id, inventario: true, equipe: true };
+    if (sim(p.coordenador)) return { papel: 'master', nome: p.nome, id: p.id, inventario: true, equipe: true };
     return { papel: 'estoquista', nome: p.nome, id: p.id, inventario: sim(p.pode_inventario), equipe: true };
   }
 
@@ -152,12 +165,17 @@ var CORE = (function () {
   function moeda(v) { return 'R$ ' + (Math.round(v * 100) / 100).toFixed(2).replace('.', ','); }
 
   function pedeEquipe(s) { if (!s) falha('Entre com sua senha na Área da equipe para fazer isso.'); }
-  function pedeInventario(s) { pedeEquipe(s); if (!s.inventario) falha('Sua senha não tem permissão para alterar o inventário. Peça à coordenação.'); }
-  function pedeCoord(s) { pedeEquipe(s); if (s.papel !== 'coordenador') falha('Só a coordenação (senha master) pode fazer isso.'); }
+  function pedeInventario(s) { pedeEquipe(s); if (!s.inventario) falha('Sua senha não tem permissão para alterar o inventário. Peça ao Master.'); }
+  function pedeCoord(s) { pedeEquipe(s); if (s.papel !== 'master') falha('Só o Master pode fazer isso.'); }
+  // Lista de material de um evento: estoque/Master ou o coordenador (maître) marcado nesse evento.
+  function pedeLista(s, conv, evId) {
+    if (s || (conv && conv.coord && conv.evento_id === evId)) return;
+    falha('Só o estoque ou o coordenador deste evento pode mexer na lista de material.');
+  }
 
   function quemDe(p, s) {
     var q = { nome: texto(p.who && p.who.nome, 80), telefone: texto(p.who && p.who.telefone, 30) };
-    if (s) q.nome = q.nome + ' [' + (s.papel === 'coordenador' ? 'coordenação' + (s.id ? ' ' + s.nome : '') : 'estoquista ' + s.nome) + ']';
+    if (s) q.nome = q.nome + ' [' + (s.papel === 'master' ? 'master' + (s.id ? ' ' + s.nome : '') : 'estoquista ' + s.nome) + ']';
     return q;
   }
 
@@ -174,6 +192,17 @@ var CORE = (function () {
     return t.length > 1 && t.slice(1).every(function (w) { return r.indexOf(w) >= 0; });
   }
   function naLista(ev, nome) { return json(ev.prestadores, []).filter(function (pr) { return mesmoNome(nome, pr.nome); })[0] || null; }
+  function perdasPendentes(db) {
+    var evs = {}, its = {};
+    db.all('eventos').forEach(function (e) { evs[e.id] = e; });
+    db.all('itens').forEach(function (i) { its[i.id] = i; });
+    return db.all('evento_itens').filter(function (l) { return l.perda === 'pendente'; }).map(function (l) {
+      var e = evs[l.evento_id] || {}, it = its[l.item_id], f = num(l.qtd_saida) - num(l.qtd_retorno);
+      return { id: l.id, evento_id: l.evento_id, evento: e.nome || '', data: e.data || '', retorno_por: e.retorno_por || '', item_id: l.item_id,
+        nome: it ? nomeItem(it) : l.item_nome, falta: f, motivo: l.motivo || '', justificativa: l.justificativa || '',
+        equipamento: !!(it && it.tipo === 'equipamento'), custo: it ? num(it.custo) * f : 0, estoque: it ? num(it.qtd_total) : 0 };
+    });
+  }
   function chaveNova() { return (uid() + uid()).replace(/[^a-z0-9]/g, '').slice(0, 14); }
   function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
   function acharNaEquipe(db, nome) {
@@ -229,27 +258,34 @@ var CORE = (function () {
           qtd_total: total, fora: fora[i.id] || 0, disponivel: total - (fora[i.id] || 0) };
       });
       var linhas = db.all('evento_itens');
+      var outros = [];
       if (conv) {
-        var usados = {};
+        var usados = {}, todasL = linhas;
         linhas = linhas.filter(function (l) { return l.evento_id === conv.evento_id; });
         linhas.forEach(function (l) { usados[l.item_id] = 1; });
-        itens = itens.filter(function (i) { return usados[i.id]; });
+        if (!conv.coord) itens = itens.filter(function (i) { return usados[i.id]; });
+        else db.all('eventos').forEach(function (e) {
+          if (e.id === conv.evento_id || e.status === 'concluido') return;
+          outros.push({ id: e.id, nome: e.nome, data: e.data, status: e.status, outro: true, prestadores: [],
+            linhas: todasL.filter(function (l) { return l.evento_id === e.id; }).map(function (l) { return { item_id: l.item_id, qtd_saida: num(l.qtd_saida) }; }) });
+        });
       }
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
-          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
+          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
-              justificativa: l.justificativa, motivo: l.motivo || '' };
+              justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '' };
           }) };
-      });
+      }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
         ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
+      if (s) out.perdas = perdasPendentes(db);
       if (s) out.equipe = equipeAtiva(db).map(function (x) { return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '' }; });
-      if (s && s.papel === 'coordenador') {
+      if (s && s.papel === 'master') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
         });
@@ -268,7 +304,7 @@ var CORE = (function () {
       var pr = naLista(ev, nome);
       if (!pr) {
         log(db, { nome: nome, telefone: tel }, 'Tentou abrir evento sem estar na lista', ev.nome);
-        falha('Seu nome não está na lista deste evento. Confira nome e sobrenome ou fale com a coordenação.');
+        falha('Seu nome não está na lista deste evento. Confira nome e sobrenome ou fale com o Master.');
       }
       var lista = json(ev.prestadores, []);
       lista.forEach(function (x) { if (x === pr || (x.nome === pr.nome)) x.telefone = tel; });
@@ -278,7 +314,7 @@ var CORE = (function () {
       var token = uid() + uid();
       db.insert('sessoes', { id: token, pessoa_id: 'ev:' + ev.id, criado_em: agora(), nome: pr.nome, telefone: tel });
       log(db, { nome: pr.nome, telefone: tel }, 'Abriu o evento pelo link', ev.nome + (partesNome(nome).join(' ') !== partesNome(pr.nome).join(' ') ? ' (digitou ' + nome + ')' : ''));
-      return { token: token, evento_id: ev.id, nome: pr.nome };
+      return { token: token, evento_id: ev.id, nome: pr.nome, coord: !!pr.coord };
     },
 
     linkEvento: function (db, p, s, quem) {
@@ -331,10 +367,10 @@ var CORE = (function () {
       var h = db.hash(senha);
       var master = getConfig(db, 'master_hash') || db.hash(SENHA_MASTER_INICIAL);
       var pessoaId = null, nome = '';
-      if (h === master) { pessoaId = 'master'; nome = 'coordenação'; }
+      if (h === master) { pessoaId = 'master'; nome = 'Master'; }
       else {
         var p2 = db.all('pessoas').filter(function (x) { return sim(x.ativo) && x.senha_hash === h; })[0];
-        if (p2) { pessoaId = p2.id; nome = (sim(p2.coordenador) ? 'coordenação ' : 'estoquista ') + p2.nome; }
+        if (p2) { pessoaId = p2.id; nome = (sim(p2.coordenador) ? 'Master ' : 'estoquista ') + p2.nome; }
       }
       if (!pessoaId) { log(db, quem, 'Senha incorreta', ''); falha('Senha incorreta.'); }
       var token = uid() + uid();
@@ -483,7 +519,7 @@ var CORE = (function () {
       var e = p.evento || {};
       var nome = texto(e.nome, 120);
       if (!nome) falha('Dê um nome ao evento.');
-      var prest = (e.prestadores || []).map(function (x) { return { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30) }; })
+      var prest = (e.prestadores || []).map(function (x) { var o = { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30) }; if (x.coord) o.coord = true; return o; })
         .filter(function (x) { return x.nome; });
       prest.forEach(function (x) {
         if (partesNome(x.nome).length < 2) falha('Informe nome e sobrenome de ' + x.nome + '.');
@@ -525,8 +561,8 @@ var CORE = (function () {
       return true;
     },
 
-    salvarListaEvento: function (db, p, s, quem) {
-      pedeEquipe(s);
+    salvarListaEvento: function (db, p, s, quem, conv) {
+      pedeLista(s, conv, p.evento_id);
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'montando') falha('A saída deste evento já foi confirmada. A lista não pode mais ser alterada.');
@@ -549,8 +585,8 @@ var CORE = (function () {
       return true;
     },
 
-    confirmarSaida: function (db, p, s, quem) {
-      pedeEquipe(s);
+    confirmarSaida: function (db, p, s, quem, conv) {
+      pedeLista(s, conv, p.id);
       var ev = porId(db.all('eventos'), p.id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'montando') falha('A saída já foi confirmada.');
@@ -564,8 +600,8 @@ var CORE = (function () {
       return true;
     },
 
-    reabrirMontagem: function (db, p, s, quem) {
-      pedeEquipe(s);
+    reabrirMontagem: function (db, p, s, quem, conv) {
+      pedeLista(s, conv, p.id);
       var ev = porId(db.all('eventos'), p.id);
       if (!ev || ev.status !== 'em_evento') falha('Só dá para reabrir um evento que saiu e ainda não voltou.');
       db.update('eventos', ev.id, { status: 'montando' });
@@ -598,25 +634,42 @@ var CORE = (function () {
           if (!mot) falha('Escolha o motivo da falta de "' + l.item_nome + '".');
           if (mot === 'Outro' && !just) falha('Explique em poucas palavras o que aconteceu com "' + l.item_nome + '".');
         } else { mot = ''; just = ''; }
-        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot });
+        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '' });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
         if (q < saiu) {
           var custo = itl ? num(itl.custo) * (saiu - q) : 0; custoTotal += custo;
           faltas.push({ l: l, falta: saiu - q, just: mot + (just ? ' — ' + just : ''), custo: custo });
         }
       });
-      var itens = db.all('itens');
-      faltas.forEach(function (f) {
-        var it = porId(itens, f.l.item_id);
-        if (it) db.update('itens', it.id, { qtd_total: String(Math.max(0, num(it.qtd_total) - f.falta)) });
-        db.insert('baixas', { id: uid(), item_id: f.l.item_id, item_nome: f.l.item_nome, qtd: String(f.falta),
-          motivo: 'Evento ' + ev.nome + ': ' + f.just, evento_id: ev.id, por: quem.nome + ' ' + quem.telefone, em: agora(), custo: f.custo ? String(f.custo) : '' });
-      });
       db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone, conferido_retorno: confRet });
       log(db, quem, 'Registrou retorno do material', ev.nome + ': ' + resumo.join(', ') +
-        (faltas.length ? ' | Faltas: ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
+        (faltas.length ? ' | Faltas (aguardando confirmação do Master/estoque): ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
         (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Conferido por ' + confRet);
       sincAgenda(db, ev.id, quem);
+      return true;
+    },
+
+    confirmarPerda: function (db, p, s, quem) {
+      pedeEquipe(s);
+      var l = porId(db.all('evento_itens'), p.id);
+      if (!l || l.perda !== 'pendente') falha('Esta perda já foi resolvida.');
+      var ev = porId(db.all('eventos'), l.evento_id) || { nome: '' }, it = porId(db.all('itens'), l.item_id);
+      var f = num(l.qtd_saida) - num(l.qtd_retorno), nome = it ? nomeItem(it) : l.item_nome;
+      var motivo = [l.motivo, l.justificativa].filter(Boolean).join(' — ');
+      if (!p.confirmar) {
+        db.update('evento_itens', l.id, { perda: 'recusada', perda_por: quem.nome });
+        log(db, quem, 'Perda não confirmada (material encontrado)', ev.nome + ': ' + f + ' × ' + nome);
+        return true;
+      }
+      var custo = it ? num(it.custo) * f : 0;
+      if (it) {
+        if (it.tipo === 'equipamento') db.update('itens', it.id, { ativo: 'nao' });
+        else db.update('itens', it.id, { qtd_total: String(Math.max(0, num(it.qtd_total) - f)) });
+      }
+      db.insert('baixas', { id: uid(), item_id: l.item_id, item_nome: nome, qtd: String(f), motivo: 'Evento ' + ev.nome + ': ' + motivo,
+        evento_id: l.evento_id, por: quem.nome + ' ' + quem.telefone, em: agora(), custo: custo ? String(custo) : '' });
+      db.update('evento_itens', l.id, { perda: 'confirmada', perda_por: quem.nome });
+      log(db, quem, 'Confirmou perda e excluiu do inventário geral', ev.nome + ': ' + f + ' × ' + nome + ' (' + motivo + ')' + (custo ? ' | ' + moeda(custo) : ''));
       return true;
     },
 
@@ -639,13 +692,13 @@ var CORE = (function () {
       if (x.id) {
         if (!porId(db.all('pessoas'), x.id)) falha('Pessoa não encontrada.');
         db.update('pessoas', x.id, dados);
-        log(db, quem, 'Alterou acesso da equipe', nome + ' — coordenação: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario + ', ativo: ' + dados.ativo + (senha ? ', senha trocada' : ''));
+        log(db, quem, 'Alterou acesso da equipe', nome + ' — master: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario + ', ativo: ' + dados.ativo + (senha ? ', senha trocada' : ''));
         return true;
       }
       if (!senha) falha('Defina uma senha pessoal para o estoquista.');
       dados.id = uid(); dados.criado_em = agora();
       db.insert('pessoas', dados);
-      log(db, quem, 'Cadastrou pessoa da equipe', nome + ' ' + dados.telefone + ' — coordenação: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario);
+      log(db, quem, 'Cadastrou pessoa da equipe', nome + ' ' + dados.telefone + ' — master: ' + dados.coordenador + ', inventário: ' + dados.pode_inventario);
       return true;
     },
 
@@ -721,7 +774,7 @@ var CORE = (function () {
     var s = sessao(db, p.token), conv = null;
     if (s && s.papel === 'prestador') { conv = s; s = null; }
     var quem = quemDe(p, s);
-    if (conv) quem = { nome: conv.nome + ' [prestador]', telefone: conv.telefone || quem.telefone };
+    if (conv) quem = { nome: conv.nome + (conv.coord ? ' [coordenador do evento]' : ' [prestador]'), telefone: conv.telefone || quem.telefone };
     return acoes[acao](db, p, s, quem, conv);
   }
 
@@ -729,7 +782,7 @@ var CORE = (function () {
     itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave'],
-    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo'],
+    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador'],
