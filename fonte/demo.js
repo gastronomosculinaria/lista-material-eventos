@@ -22,6 +22,9 @@ var DEMO_DB = (function () {
       ['Saco de confeiteiro', 'Utensílios', 20, 'Caixa de talher'], ['Açúcar sachê (caixa)', 'Secos', 5, 'Caixa de secos'], ['Adoçante líquido', 'Secos', 4, 'Caixa de secos'],
       ['Pó de café 500 g', 'Secos', 6, 'Caixa de secos']
     ];
+    m.equipe = ['Ana Paula de Souza Lima', 'Bruno Carvalho', 'Carla Mendes Rocha', 'Diego Ferreira', 'Elisa Martins Costa'].map(function (n, i) {
+      return { id: 'eq' + i, nome: n, telefone: '', funcao: i % 2 ? 'Cozinha' : 'Salão', ativo: 'sim', criado_em: new Date().toISOString() };
+    });
     m.itens = ex.map(function (e, i) {
       return { id: 'ex' + i, nome: e[0], categoria: e[1], descricao: 'Exemplo — apague ou edite', foto: '', grupo: e[3] || 'Material',
         qtd_total: String(e[2]), ativo: 'sim', criado_em: new Date().toISOString() };

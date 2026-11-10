@@ -22,7 +22,7 @@ function configurar() {
 // Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
 // (estado), poupando uma segunda ida ao servidor.
 var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
-var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1 };
 function api(acao, payload) {
   var lock = LockService.getScriptLock(), travado = false;
   function travar() { if (!travado) { lock.waitLock(20000); travado = true; } }

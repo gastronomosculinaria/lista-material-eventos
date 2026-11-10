@@ -80,6 +80,12 @@ var CORE = (function () {
     if (!token) return null;
     var s = porId(db.all('sessoes'), token);
     if (!s) return null;
+    if (String(s.pessoa_id).indexOf('ev:') === 0) {
+      var ev = porId(db.all('eventos'), s.pessoa_id.slice(3));
+      if (!ev || !naLista(ev, s.nome)) return null;
+      if (ev.status === 'concluido' && Date.now() - new Date(ev.concluido_em).getTime() > 3 * 86400000) return null;
+      return { papel: 'prestador', evento_id: ev.id, nome: s.nome, telefone: s.telefone || '' };
+    }
     if (s.pessoa_id === 'master') return { papel: 'coordenador', nome: 'Coordenação', inventario: true, equipe: true };
     var p = porId(db.all('pessoas'), s.pessoa_id);
     if (!p || !sim(p.ativo)) return null;
@@ -155,13 +161,31 @@ var CORE = (function () {
     return q;
   }
 
-  function prestadorDoEvento(ev, who) {
-    var tel = digitos(who && who.telefone);
-    if (tel.length < 8) return false;
-    return json(ev.prestadores, []).some(function (pr) {
-      var t = digitos(pr.telefone);
-      return t.length >= 8 && (t.slice(-8) === tel.slice(-8));
-    });
+  // Nome sem acento, minúsculo, sem "de/da/dos…"
+  function partesNome(n) {
+    return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ')
+      .split(/\s+/).filter(function (w) { return w && ['de', 'da', 'do', 'das', 'dos', 'e'].indexOf(w) < 0; });
+  }
+  // "Ana Souza" confere com "Ana Paula de Souza Lima": primeiro nome igual e o sobrenome digitado faz parte do nome cadastrado.
+  function mesmoNome(digitado, cadastrado) {
+    var t = partesNome(digitado), r = partesNome(cadastrado);
+    if (!t.length || !r.length || t[0] !== r[0]) return false;
+    if (r.length === 1) return true;
+    return t.length > 1 && t.slice(1).every(function (w) { return r.indexOf(w) >= 0; });
+  }
+  function naLista(ev, nome) { return json(ev.prestadores, []).filter(function (pr) { return mesmoNome(nome, pr.nome); })[0] || null; }
+  function chaveNova() { return (uid() + uid()).replace(/[^a-z0-9]/g, '').slice(0, 14); }
+  function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
+  function acharNaEquipe(db, nome) {
+    var alvo = partesNome(nome).join(' ');
+    return db.all('equipe').filter(function (x) { return partesNome(x.nome).join(' ') === alvo; })[0] || null;
+  }
+  function incluirNaEquipe(db, nome, telefone, funcao, quem) {
+    var x = acharNaEquipe(db, nome);
+    if (x) { if (telefone && !x.telefone) db.update('equipe', x.id, { telefone: telefone }); return x; }
+    x = { id: uid(), nome: nome, telefone: telefone || '', funcao: funcao || '', ativo: 'sim', criado_em: agora() };
+    db.insert('equipe', x);
+    return x;
   }
 
   var STATUS_TXT = { montando: 'Separando material', em_evento: 'Material no evento', concluido: 'Material retornado' };
@@ -194,7 +218,8 @@ var CORE = (function () {
       return true;
     },
 
-    carregar: function (db, p, s) {
+    carregar: function (db, p, s, quem, conv) {
+      if (!s && !conv) return { itens: [], eventos: [], sessao: null, grupos: [], subgrupos: {}, consumo: CONSUMO, motivos: MOTIVOS };
       aplicarPacotes(db);
       var fora = foraDoDeposito(db);
       var itens = db.all('itens').filter(function (i) { return sim(i.ativo); }).map(function (i) {
@@ -204,10 +229,16 @@ var CORE = (function () {
           qtd_total: total, fora: fora[i.id] || 0, disponivel: total - (fora[i.id] || 0) };
       });
       var linhas = db.all('evento_itens');
-      var eventos = db.all('eventos').map(function (e) {
+      if (conv) {
+        var usados = {};
+        linhas = linhas.filter(function (l) { return l.evento_id === conv.evento_id; });
+        linhas.forEach(function (l) { usados[l.item_id] = 1; });
+        itens = itens.filter(function (i) { return usados[i.id]; });
+      }
+      var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
-          prestadores: json(e.prestadores, []), criado_por: e.criado_por, concluido_em: e.concluido_em,
+          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
@@ -215,8 +246,9 @@ var CORE = (function () {
               justificativa: l.justificativa, motivo: l.motivo || '' };
           }) };
       });
-      var out = { itens: itens, eventos: eventos, sessao: s, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
+      var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
         ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
+      if (s) out.equipe = equipeAtiva(db).map(function (x) { return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '' }; });
       if (s && s.papel === 'coordenador') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador) };
@@ -224,6 +256,73 @@ var CORE = (function () {
         out.masterPadrao = !getConfig(db, 'master_hash');
       }
       return out;
+    },
+
+    entrarEvento: function (db, p, s, quem) {
+      var m = /^([a-z0-9]+)\.([a-z0-9]+)$/.exec(texto(p.e, 80));
+      var ev = m && porId(db.all('eventos'), m[1]);
+      if (!ev || !ev.chave || ev.chave !== m[2]) falha('Link do evento inválido ou antigo. Peça o link certo no grupo do evento.');
+      var nome = texto(p.who && p.who.nome, 80), tel = texto(p.who && p.who.telefone, 30);
+      if (partesNome(nome).length < 2) falha('Digite seu nome e sobrenome.');
+      if (digitos(tel).length < 8) falha('Informe seu telefone com DDD.');
+      var pr = naLista(ev, nome);
+      if (!pr) {
+        log(db, { nome: nome, telefone: tel }, 'Tentou abrir evento sem estar na lista', ev.nome);
+        falha('Seu nome não está na lista deste evento. Confira nome e sobrenome ou fale com a coordenação.');
+      }
+      var lista = json(ev.prestadores, []);
+      lista.forEach(function (x) { if (x === pr || (x.nome === pr.nome)) x.telefone = tel; });
+      db.update('eventos', ev.id, { prestadores: JSON.stringify(lista) });
+      var x = pr.id ? porId(db.all('equipe'), pr.id) : acharNaEquipe(db, pr.nome);
+      if (x && digitos(x.telefone) !== digitos(tel)) db.update('equipe', x.id, { telefone: tel });
+      var token = uid() + uid();
+      db.insert('sessoes', { id: token, pessoa_id: 'ev:' + ev.id, criado_em: agora(), nome: pr.nome, telefone: tel });
+      log(db, { nome: pr.nome, telefone: tel }, 'Abriu o evento pelo link', ev.nome + (partesNome(nome).join(' ') !== partesNome(pr.nome).join(' ') ? ' (digitou ' + nome + ')' : ''));
+      return { token: token, evento_id: ev.id, nome: pr.nome };
+    },
+
+    linkEvento: function (db, p, s, quem) {
+      pedeEquipe(s);
+      var ev = porId(db.all('eventos'), p.id);
+      if (!ev) falha('Evento não encontrado.');
+      if (!ev.chave) { ev.chave = chaveNova(); db.update('eventos', ev.id, { chave: ev.chave }); }
+      return { e: ev.id + '.' + ev.chave };
+    },
+
+    salvarEquipe: function (db, p, s, quem) {
+      pedeEquipe(s);
+      var x = p.pessoa || {}, nome = texto(x.nome, 80);
+      if (partesNome(nome).length < 2) falha('Informe nome e sobrenome.');
+      var dados = { nome: nome, telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), ativo: x.ativo === false ? 'nao' : 'sim' };
+      if (x.id) {
+        if (!porId(db.all('equipe'), x.id)) falha('Pessoa não encontrada.');
+        db.update('equipe', x.id, dados);
+        log(db, quem, 'Alterou cadastro da equipe de eventos', nome + (dados.ativo === 'nao' ? ' (desativado)' : ''));
+        return { id: x.id };
+      }
+      var ja = acharNaEquipe(db, nome);
+      if (ja) { db.update('equipe', ja.id, dados); return { id: ja.id }; }
+      dados.id = uid(); dados.criado_em = agora();
+      db.insert('equipe', dados);
+      log(db, quem, 'Cadastrou na equipe de eventos', nome);
+      return { id: dados.id };
+    },
+
+    importarEquipe: function (db, p, s, quem) {
+      pedeCoord(s);
+      var novos = [], vistos = {}, atual = 0;
+      db.all('equipe').forEach(function (x) { vistos[partesNome(x.nome).join(' ')] = 1; });
+      String(p.texto || '').split(/\r?\n/).forEach(function (linha) {
+        var c = linha.split(/[;\t]/).map(function (v) { return texto(v, 80); });
+        var nome = c[0].replace(/^[-•*\d.)\s]+/, '');
+        var k = partesNome(nome).join(' ');
+        if (!k || vistos[k]) return;
+        vistos[k] = 1;
+        novos.push({ id: uid(), nome: nome, telefone: c[1] || '', funcao: c[2] || '', ativo: 'sim', criado_em: agora() });
+      });
+      if (db.insertMany) db.insertMany('equipe', novos); else novos.forEach(function (n) { db.insert('equipe', n); });
+      log(db, quem, 'Importou equipe de eventos', novos.length + ' pessoas');
+      return { incluidos: novos.length };
     },
 
     login: function (db, p, s, quem) {
@@ -384,8 +483,14 @@ var CORE = (function () {
       var e = p.evento || {};
       var nome = texto(e.nome, 120);
       if (!nome) falha('Dê um nome ao evento.');
-      var prest = (e.prestadores || []).map(function (x) { return { nome: texto(x.nome, 80), telefone: texto(x.telefone, 30) }; })
-        .filter(function (x) { return x.nome || x.telefone; });
+      var prest = (e.prestadores || []).map(function (x) { return { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30) }; })
+        .filter(function (x) { return x.nome; });
+      prest.forEach(function (x) {
+        if (partesNome(x.nome).length < 2) falha('Informe nome e sobrenome de ' + x.nome + '.');
+        var c = x.id ? porId(db.all('equipe'), x.id) : null;
+        if (!c) { c = incluirNaEquipe(db, x.nome, x.telefone, '', quem); x.id = c.id; }
+        if (!x.telefone) x.telefone = c.telefone || '';
+      });
       var dados = { nome: nome, data: texto(e.data, 20), local: texto(e.local, 200), obs: texto(e.obs, 500),
         prestadores: JSON.stringify(prest), hora_inicio: texto(e.hora_inicio, 5), hora_fim: texto(e.hora_fim, 5) };
       if (e.id) {
@@ -395,7 +500,7 @@ var CORE = (function () {
         sincAgenda(db, e.id, quem);
         return { id: e.id };
       }
-      dados.id = uid(); dados.status = 'montando'; dados.criado_por = quem.nome; dados.criado_em = agora();
+      dados.id = uid(); dados.chave = chaveNova(); dados.status = 'montando'; dados.criado_por = quem.nome; dados.criado_em = agora();
       dados.concluido_em = ''; dados.retorno_por = '';
       dados.agenda_id = texto(e.agenda_id, 300); dados.agenda_criado = dados.agenda_id ? 'nao' : '';
       if (dados.agenda_id && db.all('eventos').some(function (x) { return x.agenda_id === dados.agenda_id; }))
@@ -469,12 +574,12 @@ var CORE = (function () {
       return true;
     },
 
-    registrarRetorno: function (db, p, s, quem) {
+    registrarRetorno: function (db, p, s, quem, conv) {
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'em_evento') falha('Este evento não está aguardando retorno.');
-      if (!s && !prestadorDoEvento(ev, p.who))
-        falha('Seu telefone não está na lista de prestadores deste evento. Peça ao estoquista para incluir você.');
+      if (!s && !(conv && conv.evento_id === ev.id))
+        falha('Só quem está na lista deste evento pode registrar o retorno. Abra pelo link enviado no grupo do evento.');
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
@@ -613,19 +718,23 @@ var CORE = (function () {
   function handle(db, acao, p) {
     p = p || {};
     if (!acoes[acao]) falha('Ação desconhecida.');
-    var s = sessao(db, p.token);
-    return acoes[acao](db, p, s, quemDe(p, s));
+    var s = sessao(db, p.token), conv = null;
+    if (s && s.papel === 'prestador') { conv = s; s = null; }
+    var quem = quemDe(p, s);
+    if (conv) quem = { nome: conv.nome + ' [prestador]', telefone: conv.telefone || quem.telefone };
+    return acoes[acao](db, p, s, quem, conv);
   }
 
   var TABELAS = {
     itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
-      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno'],
+      'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador'],
-    sessoes: ['id', 'pessoa_id', 'criado_em'],
+    sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
+    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
   };
@@ -657,7 +766,7 @@ function configurarApp_() {
 // Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
 // (estado), poupando uma segunda ida ao servidor.
 var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
-var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1 };
 function apiApp_(acao, payload) {
   var lock = LockService.getScriptLock(), travado = false;
   function travar() { if (!travado) { lock.waitLock(20000); travado = true; } }
