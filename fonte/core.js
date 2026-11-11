@@ -164,7 +164,7 @@ var CORE = (function () {
   function conferente(p, quem) {
     var c = texto(p.conferido, 80);
     if (!c) falha('Informe quem conferiu o material junto com você.');
-    if (c.toLowerCase() === semCochete(quem.nome)) falha('A conferência precisa ser feita por outra pessoa, não por quem separou.');
+    if (c.toLowerCase() === semCochete(quem.nome) || p.sozinho) return texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 60) + ' (conferiu sozinho)';
     return c;
   }
   function moeda(v) { return 'R$ ' + (Math.round(v * 100) / 100).toFixed(2).replace('.', ','); }

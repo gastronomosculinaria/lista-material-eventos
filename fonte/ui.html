@@ -451,7 +451,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 22 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 23 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -634,16 +634,21 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function pedirConferente(titulo, texto, ev, aoConfirmar) {
     $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="' + esc(titulo) + '"><h2>' + esc(titulo) + '</h2><p class="sub">' + esc(texto) + '</p>' +
       '<label class="f" for="cf">Quem conferiu com você?</label><input type="text" id="cf" autocomplete="off" list="cfl" placeholder="Nome de outra pessoa">' +
-      '<datalist id="cfl">' + nomesEquipe(ev) + '</datalist><div id="erro" class="err" hidden></div><div style="height:12px"></div>' +
+      '<datalist id="cfl">' + nomesEquipe(ev) + '</datalist>' + sozinhoCk('cfso', 'cf') + '<div id="erro" class="err" hidden></div><div style="height:12px"></div>' +
       '<div class="row"><button class="btn" id="m-fc">Cancelar</button><button class="btn primary" id="cfok">Confirmar</button></div></div></div>';
-    $('m-fc').onclick = fecharModal; $('cf').focus();
+    $('m-fc').onclick = fecharModal; $('cf').focus(); ligarSozinho('cfso', 'cf');
     $('cfok').onclick = function () {
-      var v = $('cf').value.trim();
-      S.erro = !v ? 'Informe quem conferiu com você.' : v.toLowerCase() === S.who.nome.trim().toLowerCase() ? 'A conferência precisa ser feita por outra pessoa.' : '';
+      var so = $('cfso').checked, v = so ? S.who.nome : $('cf').value.trim();
+      S.erro = !v ? 'Informe quem conferiu com você ou marque que conferiu sozinho.' : '';
       if (S.erro) { mostrarErro(); return; }
-      aoConfirmar(v, this);
+      aoConfirmar(v, this, so);
     };
   }
+  // Quando não há segunda pessoa, quem separou confere sozinho (fica registrado assim).
+  function sozinhoCk(id, campo) {
+    return '<label class="chk" style="display:flex;gap:10px;align-items:center;margin-top:10px"><input type="checkbox" id="' + id + '"> Conferi sozinho(a), sem outra pessoa</label>';
+  }
+  function ligarSozinho(id, campo) { $(id).onchange = function () { $(campo).disabled = this.checked; if (this.checked) $(campo).value = ''; }; }
 
   // ---------- QR: etiquetas e leitor ----------
   var LIB = 'https://gastronomosculinaria.github.io/lista-material-eventos/lib/';
@@ -1183,8 +1188,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       try { navigator.clipboard.writeText(t).then(function () { toast('Lista copiada. Cole no WhatsApp.'); }, mostrar); } catch (x) { mostrar(); }
     };
     if ($('cs')) $('cs').onclick = function () {
-      pedirConferente('Fechar lista', 'Outra pessoa confere o material antes de sair. Depois disso a lista só muda se alguém da equipe reabrir.', e, function (conf, btn) {
-        fazer(btn, api('confirmarSaida', { id: e.id, conferido: conf }), function () { toast('Lista fechada. Material liberado para o evento.'); render(); });
+      pedirConferente('Fechar lista', 'De preferência outra pessoa confere o material antes de sair. Depois disso a lista só muda se alguém da equipe reabrir.', e, function (conf, btn, so) {
+        fazer(btn, api('confirmarSaida', { id: e.id, conferido: conf, sozinho: so }), function () { toast('Lista fechada. Material liberado para o evento.'); render(); });
       });
     };
     if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
@@ -1271,8 +1276,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
     $('fecha').onclick = function () {
       if (!linhas().length) { toast('Separe pelo menos um item antes de fechar.'); return; }
-      pedirConferente('Fechar lista', 'Outra pessoa confere o material antes de sair. Depois disso a lista só muda se alguém da equipe reabrir.', e, function (cf, btn) {
-        fazer(btn, api('salvarListaEvento', { evento_id: e.id, linhas: linhas() }).then(function () { return api('confirmarSaida', { id: e.id, conferido: cf }); }),
+      pedirConferente('Fechar lista', 'De preferência outra pessoa confere o material antes de sair. Depois disso a lista só muda se alguém da equipe reabrir.', e, function (cf, btn, so) {
+        fazer(btn, api('salvarListaEvento', { evento_id: e.id, linhas: linhas() }).then(function () { return api('confirmarSaida', { id: e.id, conferido: cf, sozinho: so }); }),
           function () { ls(chave, null); toast('Lista fechada. Material liberado para o evento.'); voltar(); });
       });
     };
@@ -1296,7 +1301,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>' +
           '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
       }, '<div class="list">', '</div>'); }).join('') +
-      '<label class="f" for="cfr">Quem conferiu o retorno com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' +
+      '<label class="f" for="cfr">Quem conferiu o retorno com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
       '<datalist id="cfl">' + nomesEquipe(e) + '</datalist><div id="erro" class="err" hidden></div>';
     function linha(id) { return e.linhas.filter(function (x) { return x.item_id === id; })[0]; }
     function upd(id) {
@@ -1320,7 +1325,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     document.querySelectorAll('[data-ev0]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ev0, 0); }; });
     document.querySelectorAll('[data-mm]').forEach(function (x) { x.onchange = function () { R.m[x.dataset.mm] = x.value; guardar(); }; });
     document.querySelectorAll('[data-jj]').forEach(function (x) { x.oninput = function () { R.j[x.dataset.jj] = x.value; guardar(); }; });
-    $('cfr').oninput = function () { R.c = this.value; guardar(); };
+    $('cfr').oninput = function () { R.c = this.value; guardar(); }; ligarSozinho('cfrso', 'cfr');
     $('tudo').onclick = function () { e.linhas.forEach(function (l) { setV(l.item_id, l.qtd_saida); }); };
     $('qr').onclick = function () {
       lerQR(function (txt) {
@@ -1337,11 +1342,11 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
     bar('<button class="btn primary" id="ok">Enviar retorno</button>');
     $('ok').onclick = function () {
-      var cf = $('cfr').value.trim();
-      S.erro = !cf ? 'Informe quem conferiu o retorno com você.' : cf.toLowerCase() === S.who.nome.trim().toLowerCase() ? 'A conferência precisa ser feita por outra pessoa.' : '';
+      var so = $('cfrso').checked, cf = so ? S.who.nome : $('cfr').value.trim();
+      S.erro = !cf ? 'Informe quem conferiu o retorno com você ou marque que conferiu sozinho.' : '';
       if (S.erro) { mostrarErro(); return; }
       var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value }; });
-      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
+      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf, sozinho: so }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
     };
   };
 
