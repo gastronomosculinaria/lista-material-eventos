@@ -318,7 +318,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Cadastro"><h2>' + (novo ? 'Cadastrar pessoa' : esc(x.nome)) + '</h2>' +
         (x.bloqueado ? '<div class="err" style="margin-bottom:10px"><b>Bloqueado(a)</b>: ' + esc(x.motivo) + (x.bloqueado_por ? '<br><small>' + esc(x.bloqueado_por) + '</small>' : '') + '</div>' : '') +
         (x.novo ? '<div class="panel" style="margin-bottom:10px">Cadastro feito pela própria pessoa pelo link. Confira e toque em <b>Salvar</b>.</div>' : '') +
-        campo('cn1', 'Nome completo', x.nome) + campo('ce1', 'Nome na escala (como no Montador)', x.nome_escala || '', 'text', ' placeholder="' + esc(curto(x.nome) || 'Ex.: Shirlei Franco') + '"') + campo('ct1', 'Telefone com DDD', x.telefone, 'tel') +
+        campo('cn1', 'Nome completo', x.nome) + campo('ce1', 'Nome na escala (como no Montador)', x.nome_escala || '', 'text', ' placeholder="' + esc(curto(x.nome) || 'Ex.: Ana Souza') + '"') + campo('ct1', 'Telefone com DDD', x.telefone, 'tel') +
         campo('cf1', 'Função', x.funcao, 'text', ' list="funcoes"') + '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' +
         campo('cr1', 'RG', x.rg) + campo('cc1', 'CPF', x.cpf, 'text', ' inputmode="numeric"') + campo('cp1', 'Chave Pix', x.pix) +
         '<div id="mb"></div><div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px;flex-wrap:wrap"><button class="btn primary" id="cok">Salvar</button>' +

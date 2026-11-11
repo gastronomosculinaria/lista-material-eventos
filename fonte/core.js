@@ -243,7 +243,7 @@ var CORE = (function () {
     return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', bloqueado: x.bloqueado === 'sim', motivo: x.bloqueado === 'sim' ? x.motivo_bloqueio || '' : '',
       novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x) };
   }
-  // Nome como é chamado no Montador de Escala ("Shirlei Franco"); sem cadastro, primeiro + último nome.
+  // Nome como é chamado no Montador de Escala ("Ana Souza"); sem cadastro, primeiro + último nome.
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
   function nomeEscala(x) { return x.nome_escala || curto(x.nome); }
   // Liga os nomes usados no Montador ao cadastro: primeiro nome igual e todas as palavras contidas no nome completo.
