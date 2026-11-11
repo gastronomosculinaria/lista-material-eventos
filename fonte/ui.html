@@ -266,6 +266,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var pronto = S.estado; S.estado = null;
     return (pronto ? Promise.resolve(pronto) : api('carregar')).then(function (d) {
       S.data = d; ls('dados', d);
+      // com senha pessoal, o nome mostrado é o do cadastro (não o que foi digitado na entrada)
+      if (d.sessao && d.sessao.id && S.who && d.sessao.nome && S.who.nome !== d.sessao.nome) { S.who.nome = d.sessao.nome; ls('who', S.who); }
       if (S.token && !d.sessao && !d.convite) { S.token = null; ls('token', null); }
     });
   }
@@ -1508,7 +1510,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<form id="f">' + campo('cn', 'Nome completo', 'text', ' autocomplete="name"') + campo('cr', 'RG') + campo('cc', 'CPF', 'text', ' inputmode="numeric" placeholder="000.000.000-00"') +
       campo('ct', 'Telefone com DDD', 'tel', ' autocomplete="tel" placeholder="(11) 99999-9999"') + campo('cf', 'Função', 'text', ' list="funcoes" placeholder="Ex.: Garçom"') +
       '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' + campo('cp', 'Chave Pix') +
-      '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
+      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b></p>' +
+      '<div id="erro" class="err" hidden></div><div style="height:8px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
     $('f').onsubmit = function (e) {
       e.preventDefault();
       var btn = $('ok'), nome = $('cn').value.trim(); btn.disabled = true; S.erro = ''; mostrarErro();
