@@ -703,7 +703,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         var k = Math.min(1, max / Math.max(img.width, img.height));
         var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-        res(c.toDataURL('image/jpeg', 0.75));
+        res(c.toDataURL('image/jpeg', 0.7));
       };
       img.onerror = function () { rej(new Error('Não consegui abrir essa foto.')); };
       img.src = url;
@@ -745,7 +745,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     ligarSub('gr', 'sg');
     $('fo').onchange = function () {
       var f = this.files[0]; if (!f) return;
-      comprimir(f, IS_GAS || REMOTO ? 1000 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
+      comprimir(f, IS_GAS || REMOTO ? 800 : 500).then(function (d) { nova = d; $('prev').innerHTML = '<img src="' + d + '" alt="">'; })
         .catch(function (e) { S.erro = e.message; mostrarErro(); });
     };
     $('cn').onclick = voltar;

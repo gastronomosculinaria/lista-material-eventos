@@ -198,7 +198,7 @@ var CORE = (function () {
 
   function quemDe(p, s) {
     var q = { nome: texto(p.who && p.who.nome, 80), telefone: texto(p.who && p.who.telefone, 30) };
-    if (s) q.nome = q.nome + ' [' + (s.papel === 'master' ? 'master' + (s.id ? ' ' + s.nome : '') : 'estoquista ' + s.nome) + ']';
+    if (s) q.nome = q.nome + ' [' + (s.papel === 'master' ? 'master' + (s.id ? ' ' + s.nome : '') : (s.estoque ? 'estoquista ' : 'coordenação ') + s.nome) + ']';
     return q;
   }
 
@@ -561,7 +561,7 @@ var CORE = (function () {
       if (h === master) { pessoaId = 'master'; nome = 'Master'; }
       else {
         var p2 = db.all('pessoas').filter(function (x) { return sim(x.ativo) && x.senha_hash === h; })[0];
-        if (p2) { pessoaId = p2.id; nome = (sim(p2.coordenador) ? 'Master ' : 'estoquista ') + p2.nome; }
+        if (p2) { pessoaId = p2.id; nome = (sim(p2.coordenador) ? 'Master ' : p2.estoque !== 'nao' ? 'estoquista ' : 'coordenação ') + p2.nome; }
       }
       if (!pessoaId) { log(db, quem, 'Senha incorreta', ''); falha('Senha incorreta.'); }
       var token = uid() + uid();
