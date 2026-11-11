@@ -55,6 +55,6 @@ function lerCopia_() {
 
 // Nunca é executada: só lista os serviços que o app usa, para o Google pedir as permissões certas.
 function permissoes_() {
-  SpreadsheetApp.getActiveSpreadsheet(); DriveApp.getRootFolder(); CalendarApp.getDefaultCalendar();
+  SpreadsheetApp.getActiveSpreadsheet(); DriveApp.getRootFolder().createFile('x', 'x'); DriveApp.createFolder('x'); CalendarApp.getDefaultCalendar();
   Session.getEffectiveUser(); LockService.getScriptLock(); UrlFetchApp.fetch(FONTE); HtmlService.createHtmlOutput('');
 }
