@@ -241,7 +241,61 @@ var CORE = (function () {
   // Dados pessoais (RG, CPF, Pix) não vão no carregar: só pela ficha, para a coordenação.
   function resumoEquipe(x) {
     return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', bloqueado: x.bloqueado === 'sim', motivo: x.bloqueado === 'sim' ? x.motivo_bloqueio || '' : '',
-      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix) };
+      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x) };
+  }
+  // Nome como é chamado no Montador de Escala ("Shirlei Franco"); sem cadastro, primeiro + último nome.
+  function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
+  function nomeEscala(x) { return x.nome_escala || curto(x.nome); }
+  // Liga os nomes usados no Montador ao cadastro: primeiro nome igual e todas as palavras contidas no nome completo.
+  // Só preenche quando há uma única pessoa possível e ela ainda não tem nome na escala.
+  function aplicarApelidos(db, lista) {
+    var eq = db.all('equipe'), feitos = 0, usados = {}, ambiguos = [];
+    eq.forEach(function (x) { if (x.nome_escala) usados[x.id] = 1; });
+    lista.forEach(function (ap) {
+      ap = texto(ap, 80); var t = partesNome(ap); if (!t.length) return;
+      var c = eq.filter(function (x) { var r = partesNome(x.nome); return r[0] === t[0] && t.every(function (w) { return r.indexOf(w) >= 0; }); });
+      if (c.length !== 1) { if (c.length > 1) ambiguos.push(ap); return; }
+      if (usados[c[0].id]) return;
+      usados[c[0].id] = 1; c[0].nome_escala = ap; db.update('equipe', c[0].id, { nome_escala: ap }); feitos++;
+    });
+    return { ligados: feitos, ambiguos: ambiguos };
+  }
+  // Importação única dos cadastros antigos (planilhas de pagamento e liberação de acesso): só preenche o que está vazio.
+  // Registro: [nome completo, [outros nomes], rg, cpf, pix, funcao, motivo do bloqueio]
+  function importarCadastro(db, regs) {
+    var eq = db.all('equipe'), r = { completados: 0, novos: 0, nomes: 0 }, novos = [];
+    function chave(n) { return partesNome(n).join(' '); }
+    function achar(nomes) {
+      var ks = nomes.map(chave), x = eq.filter(function (e) { return ks.indexOf(chave(e.nome)) >= 0; });
+      if (x.length === 1) return x[0];
+      var t = partesNome(nomes[0]);
+      x = eq.filter(function (e) { var p = partesNome(e.nome); if (!p.length || p[0] !== t[0] || p.length < 2) return false;
+        var a = p.length <= t.length ? p : t, b = a === p ? t : p; return a.every(function (w) { return b.indexOf(w) >= 0; }); });
+      return x.length === 1 ? x[0] : null;
+    }
+    (regs || []).forEach(function (g) {
+      var nome = texto(g[0], 120), alt = (g[1] || []).map(function (n) { return texto(n, 120); });
+      if (partesNome(nome).length < 2) return;
+      var cpf = cpfOk(g[3]) ? fmtCpf(g[3]) : '', d = {};
+      var x = achar([nome].concat(alt));
+      if (cpf && porCpf(db, cpf, x && x.id)) cpf = '';
+      if (x) {
+        if (!x.rg && g[2]) d.rg = texto(g[2], 30);
+        if (!x.cpf && cpf) d.cpf = cpf;
+        if (!x.pix && g[4]) d.pix = texto(g[4], 120);
+        if (!x.funcao && g[5]) d.funcao = texto(g[5], 40);
+        if (g[6] && x.bloqueado !== 'sim') { d.bloqueado = 'sim'; d.motivo_bloqueio = texto(g[6], 500); d.bloqueado_por = 'cadastro antigo'; }
+        var pa = partesNome(x.nome), pn = partesNome(nome);
+        if (pn.length > pa.length && pa.every(function (w) { return pn.indexOf(w) >= 0; })) { d.nome = nome; r.nomes++; }
+        if (Object.keys(d).length) { d.atualizado_em = agora(); db.update('equipe', x.id, d); Object.keys(d).forEach(function (k) { x[k] = d[k]; }); r.completados++; }
+      } else {
+        x = { id: uid(), nome: nome, telefone: '', funcao: texto(g[5], 40), ativo: 'sim', criado_em: agora(), rg: texto(g[2], 30), cpf: cpf, pix: texto(g[4], 120),
+          bloqueado: g[6] ? 'sim' : '', motivo_bloqueio: texto(g[6], 500), bloqueado_por: g[6] ? 'cadastro antigo' : '', origem: 'importado', revisado: 'sim', atualizado_em: agora() };
+        novos.push(x); eq.push(x); r.novos++;
+      }
+    });
+    if (novos.length) { if (db.insertMany) db.insertMany('equipe', novos); else novos.forEach(function (n) { db.insert('equipe', n); }); }
+    return r;
   }
   function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
   function acharNaEquipe(db, nome) {
@@ -289,6 +343,17 @@ var CORE = (function () {
     carregar: function (db, p, s, quem, conv) {
       if (!s && !conv) return { itens: [], eventos: [], sessao: null, grupos: [], subgrupos: {}, consumo: CONSUMO, motivos: MOTIVOS };
       aplicarPacotes(db);
+      // Importação única colocada na aba config (cadastro antigo + nomes do Montador). Depois de aplicada, é apagada.
+      var imp = getConfig(db, 'importar_cadastro');
+      if (imp) {
+        if (db.travar) { db.travar(); if (db.esquecer) db.esquecer('config'); imp = getConfig(db, 'importar_cadastro'); }
+        var dj = json(imp, null);
+        if (dj && dj.p && dj.p.length === dj.n) {
+          var ri = importarCadastro(db, dj.p), ra = aplicarApelidos(db, dj.e || []);
+          setConfig(db, 'importar_cadastro', '');
+          log(db, { nome: 'Sistema', telefone: '' }, 'Importou cadastro antigo da equipe', ri.completados + ' completados, ' + ri.novos + ' novos, ' + ri.nomes + ' nomes completos; ' + ra.ligados + ' nomes do Montador');
+        }
+      }
       var fora = foraDoDeposito(db);
       var itens = db.all('itens').filter(function (i) { return sim(i.ativo); }).map(function (i) {
         var total = num(i.qtd_total);
@@ -312,7 +377,7 @@ var CORE = (function () {
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
-          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
+          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
@@ -376,6 +441,7 @@ var CORE = (function () {
       var x = p.pessoa || {}, nome = texto(x.nome, 120);
       if (partesNome(nome).length < 2) falha('Informe o nome completo.');
       var dados = { nome: nome, telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), ativo: x.ativo === false ? 'nao' : 'sim', atualizado_em: agora() };
+      if (x.nome_escala !== undefined) dados.nome_escala = texto(x.nome_escala, 60);
       if (x.rg !== undefined) dados.rg = texto(x.rg, 30);
       if (x.cpf !== undefined) dados.cpf = texto(x.cpf, 20);
       if (x.pix !== undefined) dados.pix = texto(x.pix, 120);
@@ -397,12 +463,20 @@ var CORE = (function () {
       return { id: dados.id };
     },
 
+    // Cola a lista de nomes do Montador de Escala (um por linha) para ligar ao cadastro.
+    importarApelidos: function (db, p, s, quem) {
+      pedeEscala(s);
+      var r = aplicarApelidos(db, String(p.texto || '').split(/\r?\n/));
+      log(db, quem, 'Ligou nomes do Montador de Escala ao cadastro', r.ligados + ' pessoas');
+      return r;
+    },
+
     fichaEquipe: function (db, p, s, quem) {
       pedeEscala(s);
       var x = porId(db.all('equipe'), p.id);
       if (!x) falha('Pessoa não encontrada.');
       log(db, quem, 'Consultou cadastro completo', x.nome);
-      return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', rg: x.rg || '', cpf: x.cpf || '', pix: x.pix || '',
+      return { id: x.id, nome: x.nome, nome_escala: x.nome_escala || '', escala: nomeEscala(x), telefone: x.telefone || '', funcao: x.funcao || '', rg: x.rg || '', cpf: x.cpf || '', pix: x.pix || '',
         bloqueado: x.bloqueado === 'sim', motivo: x.motivo_bloqueio || '', bloqueado_por: x.bloqueado_por || '', origem: x.origem || '', novo: x.origem === 'link' && x.revisado !== 'sim',
         criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '' };
     },
@@ -637,7 +711,7 @@ var CORE = (function () {
       if (!nome) falha('Dê um nome ao evento.');
       var podeEquipe = s.escala && (!antigo || antigo.escala_status !== 'enviada' || s.papel === 'master');
       var prest = (e.prestadores || []).map(function (x) {
-        var o = { id: texto(x.id, 40), nome: texto(x.nome, 80), telefone: texto(x.telefone, 30), secao: texto(x.secao, 30), funcao: texto(x.funcao, 60) };
+        var o = { id: texto(x.id, 40), nome: texto(x.nome, 120), telefone: texto(x.telefone, 30), secao: texto(x.secao, 30), funcao: texto(x.funcao, 60) };
         if (x.coord) o.coord = true; return o;
       }).filter(function (x) { return x.nome; });
       if (!podeEquipe) prest = antigo ? json(antigo.prestadores, []) : [];
@@ -648,6 +722,7 @@ var CORE = (function () {
         if (c.bloqueado === 'sim' && !(antigo && json(antigo.prestadores, []).some(function (o) { return o.id === c.id; })))
           falha(c.nome + ' está bloqueado(a): ' + (c.motivo_bloqueio || 'sem justificativa') + '.');
         if (!x.telefone) x.telefone = c.telefone || '';
+        x.apelido = nomeEscala(c);
       });
       var dados = { nome: nome, data: texto(e.data, 20), local: texto(e.local, 200), obs: texto(e.obs, 500),
         prestadores: JSON.stringify(prest), hora_inicio: texto(e.hora_inicio, 5), hora_fim: texto(e.hora_fim, 5) };
@@ -789,7 +864,7 @@ var CORE = (function () {
       db.update('eventos', ev.id, { escala_status: 'enviada', escala_por: por, escala_em: em });
       // Aba "escalas" da planilha: uma linha por pessoa; o Montador de Escala lê daqui.
       var linhas = prest.map(function (x, i) {
-        return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.nome, secao: x.secao || 'Salão',
+        return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
           funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
       });
       db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
@@ -939,7 +1014,7 @@ var CORE = (function () {
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
-    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em'],
+    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala'],
     escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
