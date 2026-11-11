@@ -348,10 +348,14 @@ var CORE = (function () {
       if (imp) {
         if (db.travar) { db.travar(); if (db.esquecer) db.esquecer('config'); imp = getConfig(db, 'importar_cadastro'); }
         var dj = json(imp, null);
-        if (dj && dj.p && dj.p.length === dj.n) {
+        function fnv(t) { var h = 2166136261; for (var i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h; }
+        if (dj && dj.p && dj.p.length === dj.n && fnv(JSON.stringify([dj.p, dj.e || []])) === dj.h) {
           var ri = importarCadastro(db, dj.p), ra = aplicarApelidos(db, dj.e || []);
           setConfig(db, 'importar_cadastro', '');
           log(db, { nome: 'Sistema', telefone: '' }, 'Importou cadastro antigo da equipe', ri.completados + ' completados, ' + ri.novos + ' novos, ' + ri.nomes + ' nomes completos; ' + ra.ligados + ' nomes do Montador');
+        } else if (imp) {
+          setConfig(db, 'importar_cadastro', '');
+          log(db, { nome: 'Sistema', telefone: '' }, 'Importação do cadastro antigo recusada', 'os dados chegaram diferentes do conferido; nada foi alterado');
         }
       }
       var fora = foraDoDeposito(db);
