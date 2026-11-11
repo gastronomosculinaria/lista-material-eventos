@@ -450,8 +450,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       h += '<button class="tile wide" id="t-out"><span style="flex:1">Conectado como <b style="font-size:16px">' + esc(s.papel === 'master' ? 'Master' + (s.id ? ' · ' + s.nome : '') : papelTxt(s) + ' · ' + s.nome) + '</b></span><span class="btn">Sair</span></button>';
     }
     h += '</div>';
-    if (d.agenda) h += '<h2>Próximos na agenda</h2><div id="agh"><div class="loading">Lendo sua Agenda Google…</div></div>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 21 • Gastrônomos</p>';
+    h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 22 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -473,19 +473,45 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if ($('t-pd')) $('t-pd').onclick = function () { ir('perdas'); };
     $('t-out').onclick = function () { api('sair').catch(function () {}); sairDeTudo(); toast('Você saiu da área da equipe'); render(); };
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
-    if ($('agh')) api('listarAgenda').then(function (l) {
-      if (!$('agh')) return;
-      l = l.slice(0, 6);
-      $('agh').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
-        return '<button class="li" data-hk="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
-          (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div>' +
-          (c.evento_id ? '<span class="pill concluido">' + (s.estoque ? 'Lista criada' : 'Aberto') + '</span>' : '<span class="pill montando">' + (s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
-      }).join('') + '</div>' : '<div class="empty">Nenhum compromisso na agenda nos próximos 90 dias.</div>';
-      document.querySelectorAll('[data-hk]').forEach(function (b) {
-        b.onclick = function () { var c = l[+b.dataset.hk]; if (c.evento_id) ir('evento', { id: c.evento_id }); else daAgenda(c, b); };
-      });
-    }).catch(function (e) { if ($('agh')) $('agh').innerHTML = erroAgenda(e); });
+    if ($('agh')) desenharProximos('agh', 7);
+    $('vpe').onclick = function (e) { e.preventDefault(); ir('proximos'); };
     $('troca').onclick = function (e) { e.preventDefault(); api('sair').catch(function () {}); sairDeTudo(); render(); };
+  };
+
+  function maisDias(n) { var d = new Date(hoje() + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  // Eventos de hoje até hoje+dias: os do app e os da agenda que ainda não foram abertos aqui.
+  function proximos(dias) {
+    var ini = hoje(), fim = maisDias(dias), s = sess();
+    var dentro = function (d) { d = String(d || '').slice(0, 10); return d >= ini && d <= fim; };
+    var l = S.data.eventos.filter(function (e) { return dentro(e.data); }).map(function (e) {
+      return { titulo: e.nome, data: String(e.data).slice(0, 10), hora_inicio: e.hora_inicio, local: e.local, ev: e };
+    });
+    var ag = s && (s.estoque || s.escala) && S.data.agenda ? api('listarAgenda').catch(function () { return []; }) : Promise.resolve([]);
+    return ag.then(function (a) {
+      a.forEach(function (c) { if (!c.evento_id && dentro(c.data)) l.push({ titulo: c.titulo, data: String(c.data).slice(0, 10), hora_inicio: c.hora_inicio, local: c.local, c: c }); });
+      return l.sort(function (x, y) { return x.data.localeCompare(y.data) || String(x.hora_inicio || '').localeCompare(String(y.hora_inicio || '')); });
+    });
+  }
+  function desenharProximos(alvo, dias) {
+    var s = sess();
+    return proximos(dias).then(function (l) {
+      if (!$(alvo)) return;
+      $(alvo).innerHTML = l.length ? '<div class="list">' + l.map(function (x, k) {
+        return '<button class="li" data-px' + alvo + '="' + k + '"><div class="mid"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(x.data) +
+          (x.hora_inicio ? ' · ' + esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div></div>' +
+          (x.ev ? '<span class="pill ' + x.ev.status + '">' + STATUS[x.ev.status] + '</span>' : '<span class="pill montando">' + (s && s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum evento nos próximos ' + dias + ' dias.</div>';
+      document.querySelectorAll('[data-px' + alvo + ']').forEach(function (b) {
+        b.onclick = function () { var x = l[+b.getAttribute('data-px' + alvo)]; if (x.ev) ir('evento', { id: x.ev.id }); else daAgenda(x.c, b); };
+      });
+    }).catch(function (e) { if ($(alvo)) $(alvo).innerHTML = erroAgenda(e); });
+  }
+
+  V.proximos = function () {
+    header('Próximos eventos', true);
+    bar('');
+    $('app').innerHTML = '<p class="sub">De hoje, ' + dataBR(hoje()) + ', até ' + dataBR(maisDias(30)) + '.</p><div id="pxl"><div class="loading">Carregando eventos…</div></div>';
+    desenharProximos('pxl', 30);
   };
 
   function grupos() { return S.data.grupos || ['Material']; }
