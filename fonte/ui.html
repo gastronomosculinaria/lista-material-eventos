@@ -465,6 +465,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (s) {
       var uc = d.ultimaContagem;
       if (s.estoque) h += '<button class="tile" id="t-cnt"><b>Contagem</b><span>' + (uc ? 'Última em ' + quando(uc.em).split(',')[0] + (uc.diferencas ? ' · ' + uc.diferencas + ' diferenças' : '') : 'Conferir o depósito') + '</span></button>';
+      if (s.escala) h += '<button class="tile" id="t-esc"><b>Escalar equipe</b><span>Quem vai em cada evento, antes da lista de material</span></button>';
       if (s.escala) h += '<button class="tile" id="t-eq"><b>Equipe de eventos</b><span class="big">' + (d.equipe || []).length + '</span><span>pessoas no cadastro</span></button>';
       if (s.papel === 'master') h += '<button class="tile" id="t-pes"><b>Equipe e senhas</b><span>Estoquistas e permissões</span></button>' +
         '<button class="tile" id="t-his"><b>Histórico</b><span>Quem acessou e o que mudou</span></button>';
@@ -472,7 +473,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.7 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.8 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -484,6 +485,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = h;
     if ($('t-inv')) $('t-inv').onclick = function () { ir('inventario'); };
     if ($('t-es')) $('t-es').onclick = function () { ir('escalas'); };
+    if ($('t-esc')) $('t-esc').onclick = function () { ir('escalaEventos'); };
     if ($('t-cm')) $('t-cm').onclick = function () { ir('contagem'); };
     $('t-ev').onclick = function () { ir('eventos'); };
     if ($('t-pes')) $('t-pes').onclick = function () { ir('pessoas'); };
@@ -1029,7 +1031,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   // Escalar equipe: digita o primeiro nome, inclui ou retira da equipe do evento.
   V.escalar = function () {
-    var e = evento(S.p.id), ss = sess();
+    var c = S.p.agenda, e = S.p.id ? evento(S.p.id) : c ? { nome: c.titulo || 'Evento', data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [] } : null, ss = sess();
     if (!e) { inicio(); return; }
     var eq = S.data.equipe || [];
     function doCad(id) { return eq.filter(function (x) { return x.id === id; })[0]; }
@@ -1131,7 +1133,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       };
     };
     $('ok').onclick = function () {
-      fazer(this, api('salvarEvento', { evento: { id: e.id, nome: e.nome, data: e.data, hora_inicio: e.hora_inicio, hora_fim: e.hora_fim, local: e.local, obs: e.obs, prestadores: prest } }),
+      fazer(this, api('salvarEvento', { evento: { id: e.id, nome: e.nome, data: e.data, hora_inicio: e.hora_inicio, hora_fim: e.hora_fim, local: e.local, obs: e.obs, prestadores: prest, agenda_id: e.id ? '' : c.id } }),
         function () { toast('Equipe salva'); S.p.mudou = false; voltar(); });
     };
   };
@@ -1232,22 +1234,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('esok').onclick = function () { fazer(this, api('enviarEscala', { id: e.id }), function () { toast('Escala enviada'); render(); }); };
     };
     if ($('resc')) $('resc').onclick = function () { fazer(this, api('enviarEscala', { id: e.id, reabrir: true }), function () { toast('Escala reaberta'); render(); }); };
-    if ($('lnk')) $('lnk').onclick = function () {
-      var b = this; b.disabled = true;
-      api('linkEvento', { id: e.id }).then(function (r) {
-        b.disabled = false;
-        var u = PAGES + '?e=' + r.e, t = e.nome + ' (' + dataBR(e.data) + ')\nMaterial do evento: abra o link e confirme seu nome e sobrenome.\n' + u;
-        $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link do evento"><h2>Link do evento</h2>' +
-          '<p class="sub">Mande no grupo do evento. Só abre para as ' + e.prestadores.length + ' pessoas marcadas na equipe.</p><textarea id="lt" readonly style="min-height:110px">' + esc(t) + '</textarea>' +
-          '<div class="row" style="margin-top:14px"><button class="btn primary" id="lc">Copiar</button><a class="btn" id="lw" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(t) + '">WhatsApp</a><button class="btn" id="m-fc">Fechar</button></div></div></div>';
-        $('mbg').onclick = function (x) { if (x.target.id === 'mbg') fecharModal(); };
-        $('m-fc').onclick = fecharModal;
-        $('lc').onclick = function () {
-          function sel() { $('lt').select(); try { document.execCommand('copy'); toast('Link copiado'); } catch (x) {} }
-          try { navigator.clipboard.writeText(t).then(function () { toast('Link copiado. Cole no grupo do evento.'); }, sel); } catch (x) { sel(); }
-        };
-      }).catch(function (x) { b.disabled = false; toast(x.message); });
-    };
+    if ($('lnk')) $('lnk').onclick = function () { linkGrupo(e, this); };
     document.querySelectorAll('[data-aba]').forEach(function (b) { b.onclick = function () { S.p.aba = b.dataset.aba; render(); }; });
     function nomeL(l) { return nomeIt(item(l.item_id) || { nome: l.nome }); }
     if ($('imp')) $('imp').onclick = function () {
@@ -1528,6 +1515,48 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         try { window.print(); } catch (x) { toast('Use o menu do navegador para imprimir'); }
       }).catch(function (e) { btn.disabled = false; btn.textContent = 'Imprimir etiquetas'; S.erro = e.message; mostrarErro(); });
     };
+  };
+
+  // Link do evento para mandar no grupo do WhatsApp (só abre para quem está na equipe).
+  function linkGrupo(e, b) {
+    b.disabled = true;
+    api('linkEvento', { id: e.id }).then(function (r) {
+      b.disabled = false;
+      var u = PAGES + '?e=' + r.e, t = e.nome + ' (' + dataBR(e.data) + ')\nMaterial do evento: abra o link e confirme seu nome e sobrenome.\n' + u;
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link do evento"><h2>Link do evento</h2>' +
+        '<p class="sub">Mande no grupo do evento. Só abre para as ' + e.prestadores.length + ' pessoas marcadas na equipe.</p><textarea id="lt" readonly style="min-height:110px">' + esc(t) + '</textarea>' +
+        '<div class="row" style="margin-top:14px"><button class="btn primary" id="lc">Copiar</button><a class="btn" id="lw" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(t) + '">WhatsApp</a><button class="btn" id="m-fc">Fechar</button></div></div></div>';
+      $('mbg').onclick = function (x) { if (x.target.id === 'mbg') fecharModal(); };
+      $('m-fc').onclick = fecharModal;
+      $('lc').onclick = function () {
+        function sel() { $('lt').select(); try { document.execCommand('copy'); toast('Link copiado'); } catch (x) {} }
+        try { navigator.clipboard.writeText(t).then(function () { toast('Link copiado. Cole no grupo do evento.'); }, sel); } catch (x) { sel(); }
+      };
+    }).catch(function (x) { b.disabled = false; toast(x.message); });
+  }
+
+  // Escalar equipe sem abrir a lista de material: eventos do app e compromissos da agenda dos próximos 90 dias.
+  V.escalaEventos = function () {
+    var s = sess();
+    if (!s || !s.escala) { inicio(); return; }
+    header('Escalar equipe', true);
+    bar('');
+    $('app').innerHTML = '<p class="sub">Monte a equipe de cada evento antes da lista de material. Só quem estiver na equipe abre o evento pelo link do grupo. Quem você retirar perde o acesso na hora.</p><div id="esl"><div class="loading">Carregando eventos…</div></div><div id="erro" class="err" hidden></div>';
+    proximos(90).then(function (l) {
+      if (!$('esl')) return;
+      $('esl').innerHTML = l.length ? '<div class="list">' + l.map(function (x, k) {
+        var e = x.ev, n = e ? e.prestadores.length : 0, trava = e && e.escala_status === 'enviada' && s.papel !== 'master';
+        return '<div class="li static" style="flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 60%"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(x.data) +
+          (x.hora_inicio ? ' · ' + esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div>' +
+          '<div class="hint"' + (n ? '' : ' style="color:var(--terra)"') + '>' + (n ? 'Equipe: ' + n + (n > 1 ? ' pessoas' : ' pessoa') : 'Sem equipe ainda') + (e ? '' : ' · sem lista de material') + '</div></div>' +
+          '<div style="display:flex;flex:0 0 auto;gap:6px;align-items:center">' + (n ? '<button type="button" class="btn" data-lk="' + k + '">Link</button>' : '') +
+          (trava ? '<span class="pill concluido">Escala enviada</span>' : '<button type="button" class="btn primary" data-es="' + k + '">' + (n ? 'Alterar' : 'Escalar') + '</button>') + '</div></div>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum evento nos próximos 90 dias.</div>';
+      document.querySelectorAll('[data-es]').forEach(function (b) {
+        b.onclick = function () { var x = l[+b.dataset.es]; ir('escalar', x.ev ? { id: x.ev.id } : { agenda: x.c }); };
+      });
+      document.querySelectorAll('[data-lk]').forEach(function (b) { b.onclick = function () { linkGrupo(l[+b.dataset.lk].ev, b); }; });
+    }).catch(function (e) { if ($('esl')) $('esl').innerHTML = erroAgenda(e); });
   };
 
   V.escalas = function () {
