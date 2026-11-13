@@ -241,7 +241,7 @@ var CORE = (function () {
   // Dados pessoais (RG, CPF, Pix) não vão no carregar: só pela ficha, para a coordenação.
   function resumoEquipe(x) {
     return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', bloqueado: x.bloqueado === 'sim', motivo: x.bloqueado === 'sim' ? x.motivo_bloqueio || '' : '',
-      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x), atualizado: x.link_em ? String(x.link_em).slice(0, 10) : '' };
+      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x), atualizado: x.link_em ? String(x.link_em).slice(0, 10) : '', pendente: !!x.pendente };
   }
   // Nome como é chamado no Montador de Escala ("Ana Souza"); sem cadastro, primeiro + último nome.
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
@@ -325,6 +325,7 @@ var CORE = (function () {
     if (!linhas.length) return;
     if (db.insertMany) db.insertMany('escalas', linhas); else linhas.forEach(function (r) { db.insert('escalas', r); });
   }
+  function pixIgual(a, b) { var f = function (v) { return String(v || '').toLowerCase().replace(/[\s.()\-+]/g, ''); }; return f(a) === f(b); }
   function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
   function acharNaEquipe(db, nome) {
     var alvo = partesNome(nome).join(' ');
@@ -421,7 +422,7 @@ var CORE = (function () {
         ultimaContagem: json(getConfig(db, 'ultima_contagem'), null) };
       if (s && !s.estoque && !s.separa) { out.itens = []; out.grupos = []; }
       if (s && s.estoque) out.perdas = perdasPendentes(db);
-      if (s && s.escala) out.equipe = equipeAtiva(db).map(resumoEquipe);
+      if (s && s.escala) { out.equipe = equipeAtiva(db).map(resumoEquipe); out.equipeFora = db.all('equipe').filter(function (x) { return x.ativo === 'nao'; }).map(resumoEquipe); }
       if (s && s.papel === 'master') {
         out.pessoas = db.all('pessoas').map(function (x) {
           return { id: x.id, nome: x.nome, telefone: x.telefone, ativo: sim(x.ativo), pode_inventario: sim(x.pode_inventario), coordenador: sim(x.coordenador), escala: sim(x.escala), estoque: x.estoque !== 'nao', separa: sim(x.separa) };
@@ -519,7 +520,23 @@ var CORE = (function () {
       log(db, quem, 'Consultou cadastro completo', x.nome);
       return { id: x.id, nome: x.nome, nome_escala: x.nome_escala || '', escala: nomeEscala(x), telefone: x.telefone || '', funcao: x.funcao || '', rg: x.rg || '', cpf: x.cpf || '', pix: x.pix || '',
         bloqueado: x.bloqueado === 'sim', motivo: x.motivo_bloqueio || '', bloqueado_por: x.bloqueado_por || '', origem: x.origem || '', novo: x.origem === 'link' && x.revisado !== 'sim',
-        criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '', link_em: x.link_em || '', pix_anterior: x.pix_anterior || '' };
+        criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '', link_em: x.link_em || '', pix_anterior: x.pix_anterior || '', fora: x.ativo === 'nao', pendente: x.pendente ? json(x.pendente, null) : null };
+    },
+
+    // Atualização pedida pelo link: só vale depois de aprovada pela coordenação ou pelo Master.
+    aprovarCadastro: function (db, p, s, quem) {
+      pedeEscala(s);
+      var x = porId(db.all('equipe'), p.id), n = x && x.pendente ? json(x.pendente, null) : null;
+      if (!x || !n) falha('Não há atualização para aprovar neste cadastro.');
+      if (!p.aprovar) { db.update('equipe', x.id, { pendente: '' }); log(db, quem, 'Recusou atualização de cadastro', x.nome); return true; }
+      var d = { nome: texto(n.nome, 120) || x.nome, rg: texto(n.rg, 30) || x.rg, telefone: texto(n.telefone, 30) || x.telefone, funcao: texto(n.funcao, 40) || x.funcao, pix: texto(n.pix, 120) || x.pix,
+        pendente: '', atualizado_em: agora(), link_em: agora(), revisado: 'sim' };
+      var trocou = x.pix && !pixIgual(x.pix, d.pix);
+      if (trocou) d.pix_anterior = x.pix;
+      db.update('equipe', x.id, d);
+      espalharCadastro(db, x.id, d);
+      log(db, quem, 'Aprovou atualização de cadastro', d.nome + (trocou ? ' (trocou o Pix)' : ''));
+      return true;
     },
 
     bloquearEquipe: function (db, p, s, quem) {
@@ -561,15 +578,18 @@ var CORE = (function () {
       var quemC = { nome: nome + ' [cadastro pelo link]', telefone: d.telefone };
       var ja = porCpf(db, d.cpf);
       if (ja && ja.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
-      if (ja) {
-        // Mesmo CPF: vale sempre a última atualização feita pela própria pessoa (troca de Pix, telefone...).
-        var volta = ja.ativo === 'nao';
-        d.ativo = 'sim'; d.atualizado_em = agora(); d.link_em = d.atualizado_em;
-        if (ja.pix && digitos(ja.pix) + ja.pix.toLowerCase().replace(/\s/g, '') !== digitos(d.pix) + d.pix.toLowerCase().replace(/\s/g, '')) d.pix_anterior = ja.pix;
+      if (ja && ja.ativo === 'nao') {
+        // Tinha sido tirado do cadastro: volta com os dados novos, para a coordenação conferir.
+        d.ativo = 'sim'; d.origem = 'link'; d.revisado = ''; d.pendente = ''; d.atualizado_em = agora();
         db.update('equipe', ja.id, d);
-        espalharCadastro(db, ja.id, d);
-        log(db, quemC, volta ? 'Voltou ao cadastro pelo link (tinha sido tirado)' : 'Atualizou o próprio cadastro pelo link', nome + (d.pix_anterior ? ' (trocou o Pix)' : ''));
-        return { atualizado: true };
+        log(db, quemC, 'Voltou ao cadastro pelo link (tinha sido tirado)', nome);
+        return { atualizado: true, aguardando: true };
+      }
+      if (ja) {
+        // Mesmo CPF: os dados novos ficam guardados e só valem depois que a coordenação ou o Master aprovar.
+        db.update('equipe', ja.id, { pendente: JSON.stringify({ nome: d.nome, rg: d.rg, telefone: d.telefone, funcao: d.funcao, pix: d.pix, em: agora() }) });
+        log(db, quemC, 'Pediu atualização do próprio cadastro pelo link', ja.nome + (pixIgual(ja.pix, d.pix) ? '' : ' (quer trocar o Pix)'));
+        return { atualizado: true, aguardando: true };
       }
       var mesmo = acharNaEquipe(db, nome);
       if (mesmo && mesmo.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
@@ -1060,7 +1080,7 @@ var CORE = (function () {
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
-    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala', 'link_em', 'pix_anterior'],
+    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala', 'link_em', 'pix_anterior', 'pendente'],
     escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']

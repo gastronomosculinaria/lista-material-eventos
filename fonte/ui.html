@@ -320,20 +320,27 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       function campo(i, rot, v, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" value="' + esc(v) + '"' + (extra || '') + '>'; }
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Cadastro"><h2>' + (novo ? 'Cadastrar pessoa' : esc(x.nome)) + '</h2>' +
         (x.bloqueado ? '<div class="err" style="margin-bottom:10px"><b>Bloqueado(a)</b>: ' + esc(x.motivo) + (x.bloqueado_por ? '<br><small>' + esc(x.bloqueado_por) + '</small>' : '') + '</div>' : '') +
-        (x.novo ? '<div class="panel" style="margin-bottom:10px">Cadastro feito pela própria pessoa pelo link. Confira e toque em <b>Salvar</b>.</div>' : '') +
+        (x.novo ? '<div class="panel" style="margin-bottom:10px">Cadastro feito pela própria pessoa pelo link. Confira e toque em <b>Salvar</b> para aprovar.</div>' : '') +
+        (x.fora ? '<div class="panel" style="margin-bottom:10px">Esta pessoa foi <b>tirada do cadastro</b>. Toque em <b>Salvar</b> para ela voltar.</div>' : '') +
+        (x.pendente ? '<div class="panel" id="pdb" style="margin-bottom:10px;border-color:var(--terra)"><b>A pessoa pediu para atualizar o cadastro pelo link</b>' + (x.pendente.em ? ' em ' + dataBR(String(x.pendente.em).slice(0, 10)) : '') + '. Só vale depois de aprovado.' +
+          '<div class="hint" style="margin:8px 0">' + [['nome', 'Nome'], ['telefone', 'Telefone'], ['funcao', 'Função'], ['rg', 'RG'], ['pix', 'Pix']].filter(function (c) { return x.pendente[c[0]] && String(x.pendente[c[0]]).trim() !== String(x[c[0]] || '').trim(); }).map(function (c) {
+            return '<div><b>' + c[1] + ':</b> ' + esc(x[c[0]] || '(vazio)') + ' → <b>' + esc(x.pendente[c[0]]) + '</b></div>'; }).join('') + '</div>' +
+          '<div class="row"><button class="btn primary" id="apv">Aprovar atualização</button><button class="btn" id="rcs">Recusar</button></div></div>' : '') +
         (x.link_em ? '<p class="hint" style="font-size:12px;color:var(--terra);margin:0 0 10px">Cadastro atualizado pela própria pessoa em ' + dataBR(String(x.link_em).slice(0, 10)) + (x.pix_anterior ? '. Pix anterior: ' + esc(x.pix_anterior) : '') + '</p>' : '') +
         campo('cn1', 'Nome completo', x.nome) + campo('ce1', 'Nome na escala (como no Montador)', x.nome_escala || '', 'text', ' placeholder="' + esc(curto(x.nome) || 'Ex.: Ana Souza') + '"') + campo('ct1', 'Telefone com DDD', x.telefone, 'tel') +
         campo('cf1', 'Função', x.funcao, 'text', ' list="funcoes"') + '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' +
         campo('cr1', 'RG', x.rg) + campo('cc1', 'CPF', x.cpf, 'text', ' inputmode="numeric"') + campo('cp1', 'Chave Pix', x.pix) +
         '<div id="mb"></div><div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px;flex-wrap:wrap"><button class="btn primary" id="cok">Salvar</button>' +
-        (novo ? '' : (x.bloqueado ? '<button class="btn" id="cdb">Desbloquear</button>' : '<button class="btn danger" id="cbl">Bloquear</button>') + '<button class="btn" id="crm">Tirar do cadastro</button>') +
+        (novo || x.fora ? '' : (x.bloqueado ? '<button class="btn" id="cdb">Desbloquear</button>' : '<button class="btn danger" id="cbl">Bloquear</button>') + '<button class="btn" id="crm">Tirar do cadastro</button>') +
         '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
       $('m-fc').onclick = fecharModal;
       function fim(msg) { return function () { fecharModal(); toast(msg); if (depois) depois(); else render(); }; }
       function salvar(btn, ativo) {
-        fazer(btn, api('salvarEquipe', { pessoa: { id: x.id, nome: $('cn1').value, nome_escala: $('ce1').value, telefone: $('ct1').value, funcao: $('cf1').value, rg: $('cr1').value, cpf: $('cc1').value, pix: $('cp1').value, ativo: ativo, revisado: true } }), fim(ativo ? 'Cadastro salvo' : 'Tirado do cadastro'));
+        fazer(btn, api('salvarEquipe', { pessoa: { id: x.id, nome: $('cn1').value, nome_escala: $('ce1').value, telefone: $('ct1').value, funcao: $('cf1').value, rg: $('cr1').value, cpf: $('cc1').value, pix: $('cp1').value, ativo: ativo, revisado: true } }), fim(!ativo ? 'Tirado do cadastro' : x.fora ? 'Voltou ao cadastro' : 'Cadastro salvo'));
       }
       $('cok').onclick = function () { salvar(this, true); };
+      if ($('apv')) $('apv').onclick = function () { fazer(this, api('aprovarCadastro', { id: x.id, aprovar: true }), fim('Atualização aprovada')); };
+      if ($('rcs')) $('rcs').onclick = function () { fazer(this, api('aprovarCadastro', { id: x.id, aprovar: false }), fim('Atualização recusada')); };
       if ($('crm')) $('crm').onclick = function () { salvar(this, false); };
       if ($('cdb')) $('cdb').onclick = function () { fazer(this, api('bloquearEquipe', { id: x.id, bloquear: false }), fim('Desbloqueado')); };
       if ($('cbl')) $('cbl').onclick = function () {
@@ -457,13 +464,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 25 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
       h = '<button class="li" id="t-cm" style="margin-bottom:14px"><div class="mid"><div class="nm">Contagem do mês ainda não feita</div><div class="hint">Conferir o depósito 1 vez por mês e bater com o inventário</div></div><span class="btn">Contar</span></button>' + h;
-    var pe = s.escala ? escalasPend() : [], nc = s.escala ? (d.equipe || []).filter(function (x) { return x.novo; }).length : 0;
-    if (nc) h = '<button class="li" id="t-nc" style="margin-bottom:14px"><div class="mid"><div class="nm">' + nc + (nc > 1 ? ' cadastros novos' : ' cadastro novo') + ' pelo link</div><div class="hint">Confira os dados</div></div><span class="btn">Ver</span></button>' + h;
+    var pe = s.escala ? escalasPend() : [], nc = s.escala ? (d.equipe || []).filter(function (x) { return x.novo || x.pendente; }).length : 0;
+    if (nc) h = '<button class="li" id="t-nc" style="margin-bottom:14px"><div class="mid"><div class="nm">' + nc + (nc > 1 ? ' cadastros' : ' cadastro') + ' pelo link para aprovar</div><div class="hint">Novos ou atualizados. Só valem depois de aprovados.</div></div><span class="btn">Ver</span></button>' + h;
     if (pe.length) h = '<button class="li" id="t-es" style="margin-bottom:14px"><div class="mid"><div class="nm">' + pe.length + (pe.length > 1 ? ' escalas' : ' escala') + ' para confirmar</div><div class="hint">Próximo prazo: terça ' + dataBR(pe[0].prazo_escala) + '</div></div><span class="btn">Ver</span></button>' + h;
     if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
@@ -1492,25 +1499,25 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   };
 
   V.equipe = function () {
-    var s = sess(), l = S.data.equipe || [], nv = l.filter(function (x) { return x.novo; }).length;
+    var s = sess(), l = S.data.equipe || [], nv = l.filter(function (x) { return x.novo || x.pendente; }).length, fora = S.data.equipeFora || [];
     header('Equipe de eventos', true);
     bar((s.papel === 'master' ? '<button class="btn" id="imp">Importar</button>' : '') + '<button class="btn" id="novo">+ Cadastrar</button><button class="btn primary" id="lcd">Link de cadastro</button>');
     var fil = S.p.novos ? 'novos' : S.p.fil || 'todos';
     $('app').innerHTML = '<p class="sub">' + l.length + ' pessoas. O melhor é mandar o <b>link de cadastro</b> para a pessoa nova preencher os próprios dados.</p>' +
-      '<div class="chips" style="margin-bottom:10px">' + [['todos', 'Todos'], ['novos', 'Novos pelo link' + (nv ? ' (' + nv + ')' : '')], ['incompletos', 'Sem RG/CPF/Pix'], ['bloqueados', 'Bloqueados']].map(function (f) {
+      '<div class="chips" style="margin-bottom:10px">' + [['todos', 'Todos'], ['novos', 'Para aprovar' + (nv ? ' (' + nv + ')' : '')], ['incompletos', 'Sem RG/CPF/Pix'], ['bloqueados', 'Bloqueados']].concat(fora.length ? [['tirados', 'Tirados (' + fora.length + ')']] : []).map(function (f) {
         return '<button class="chip' + (f[0] === fil ? ' on' : '') + '" data-fl="' + f[0] + '">' + f[1] + '</button>'; }).join('') + '</div>' +
       '<div class="search"><input type="text" id="q" placeholder="Buscar pelo nome…" aria-label="Buscar pessoa"></div><div id="lst" class="list"></div>' +
       '<p class="hint" style="margin-top:18px">O nome em negrito é como a pessoa aparece na escala e no Montador. <a href="#" id="apl">Colar nomes do Montador</a></p>';
     function des() {
       var ws = sem($('q').value).split(/\s+/).filter(Boolean);
-      var m = l.filter(function (x) {
+      var m = (fil === 'tirados' ? fora : l).filter(function (x) {
         var n = sem(x.nome + ' ' + x.escala);
-        if (fil === 'novos' && !x.novo || fil === 'incompletos' && x.completo || fil === 'bloqueados' && !x.bloqueado) return false;
+        if (fil === 'novos' && !(x.novo || x.pendente) || fil === 'incompletos' && x.completo || fil === 'bloqueados' && !x.bloqueado) return false;
         return ws.every(function (w) { return n.indexOf(w) >= 0; });
       }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt'); });
       $('lst').innerHTML = m.length ? m.slice(0, 200).map(function (x) {
         return '<button class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(apelido(x)) + '</div><div class="hint">' + esc([x.nome, x.funcao, x.telefone].filter(Boolean).join(' · ')) + (x.completo ? '' : ' · <span style="color:var(--bad)">cadastro incompleto</span>') + '</div>' + atualTxt(x) + '</div>' +
-          (x.bloqueado ? '<span class="pill falta">Bloqueado</span>' : x.novo ? '<span class="pill montando">Novo</span>' : '') + '</button>';
+          (fil === 'tirados' ? '<span class="pill concluido">Tirado</span>' : x.bloqueado ? '<span class="pill falta">Bloqueado</span>' : x.pendente ? '<span class="pill montando">Atualizou</span>' : x.novo ? '<span class="pill montando">Novo</span>' : '') + '</button>';
       }).join('') : '<div class="empty">' + (l.length ? 'Ninguém aqui.' : 'Ninguém cadastrado ainda. Mande o link de cadastro.') + '</div>';
       document.querySelectorAll('[data-pe]').forEach(function (b) { b.onclick = function () { fichaCompleta(b.dataset.pe); }; });
     }
@@ -1538,7 +1545,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     header('Cadastro da equipe');
     bar('');
     if (S.p.feito) {
-      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">' + (S.p.atual ? 'Cadastro atualizado ✔' : 'Cadastro enviado ✔') + '</h2><p>Obrigado, ' + esc(S.p.feito) + '. ' + (S.p.atual ? 'Seus dados novos já valem para os próximos pagamentos.' : 'A coordenação vai conferir seus dados.') + '</p></div>';
+      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">' + (S.p.atual ? 'Atualização enviada ✔' : 'Cadastro enviado ✔') + '</h2><p>Obrigado, ' + esc(S.p.feito) + '. ' + (S.p.atual ? 'Seus dados novos passam a valer depois que a coordenação aprovar.' : 'A coordenação vai conferir seus dados.') + '</p></div>';
       return;
     }
     function campo(i, rot, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" required' + (extra || '') + '>'; }
@@ -1547,7 +1554,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<form id="f">' + campo('cn', 'Nome completo', 'text', ' autocomplete="name"') + campo('cr', 'RG') + campo('cc', 'CPF', 'text', ' inputmode="numeric" placeholder="000.000.000-00"') +
       campo('ct', 'Telefone com DDD', 'tel', ' autocomplete="tel" placeholder="(11) 99999-9999"') + campo('cf', 'Função', 'text', ' list="funcoes" placeholder="Ex.: Garçom"') +
       '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' + campo('cp', 'Chave Pix') +
-      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b><br><span class="hint">Já tem cadastro e mudou o Pix ou o telefone? Preencha de novo: vale sempre o último envio.</span></p>' +
+      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b><br><span class="hint">Já tem cadastro e mudou o Pix ou o telefone? Preencha de novo: vale o último envio, depois que a coordenação aprovar.</span></p>' +
       '<div id="erro" class="err" hidden></div><div style="height:8px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
     $('f').onsubmit = function (e) {
       e.preventDefault();
