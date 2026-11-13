@@ -228,9 +228,15 @@ var CORE = (function () {
     return db.all('evento_itens').filter(function (l) { return l.perda === 'pendente'; }).map(function (l) {
       var e = evs[l.evento_id] || {}, it = its[l.item_id], f = num(l.qtd_saida) - num(l.qtd_retorno);
       return { id: l.id, evento_id: l.evento_id, evento: e.nome || '', data: e.data || '', retorno_por: e.retorno_por || '', item_id: l.item_id,
-        nome: it ? nomeItem(it) : l.item_nome, falta: f, motivo: l.motivo || '', justificativa: l.justificativa || '',
+        nome: it ? nomeItem(it) : l.item_nome, falta: f, motivo: l.motivo || '', justificativa: l.justificativa || '', fotos: json(l.fotos, []),
         equipamento: !!(it && it.tipo === 'equipamento'), custo: it ? num(it.custo) * f : 0, estoque: it ? num(it.qtd_total) : 0 };
     });
+  }
+  // Até 3 fotos por item que não voltou (endereços devolvidos por fotoRetorno).
+  function fotosValidas(l) {
+    return (Array.isArray(l) ? l : []).filter(function (u) {
+      return typeof u === 'string' && (/^https:\/\/drive\.google\.com\/[\w?=&\/.-]+$/.test(u) || /^data:image\/jpeg;base64,[\w+\/=]+$/.test(u));
+    }).slice(0, 3);
   }
   function chaveNova() { return (uid() + uid()).replace(/[^a-z0-9]/g, '').slice(0, 14); }
   // CPF com dígitos verificadores
@@ -436,7 +442,7 @@ var CORE = (function () {
           linhas: ordemItens(linhas.filter(function (l) { return l.evento_id === e.id; })).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
-              justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '' };
+              justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []) };
           }) };
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
@@ -949,6 +955,20 @@ var CORE = (function () {
       return true;
     },
 
+    // Foto da justificativa de material que não voltou: sobe uma por vez, antes de enviar o retorno.
+    fotoRetorno: function (db, p, s, quem, conv) {
+      var ev = porId(db.all('eventos'), p.evento_id);
+      if (!ev) falha('Evento não encontrado.');
+      if (ev.status !== 'em_evento') falha('Este evento não está aguardando retorno.');
+      if (!s && !(conv && conv.evento_id === ev.id))
+        falha('Só quem está na lista deste evento pode registrar o retorno. Abra pelo link enviado no grupo do evento.');
+      var d = String(p.foto || '');
+      if (!/^data:image\/[a-z]+;base64,/.test(d)) falha('Foto inválida.');
+      if (d.length > 1500000) falha('Foto grande demais. Tente de novo.');
+      var l = db.all('evento_itens').filter(function (x) { return x.evento_id === ev.id && x.item_id === p.item_id; })[0];
+      return { url: db.salvarFoto(d, 'Retorno ' + ev.nome + ' ' + (ev.data || '') + ' - ' + (l ? l.item_nome : 'item')) };
+    },
+
     registrarRetorno: function (db, p, s, quem, conv) {
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
@@ -973,11 +993,12 @@ var CORE = (function () {
           if (!mot) falha('Escolha o motivo da falta de "' + l.item_nome + '".');
           if (mot === 'Outro' && !just) falha('Explique em poucas palavras o que aconteceu com "' + l.item_nome + '".');
         } else { mot = ''; just = ''; }
-        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '' });
+        var fts = q < saiu ? fotosValidas(e.fotos) : [];
+        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '' });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
         if (q < saiu) {
           var custo = itl ? num(itl.custo) * (saiu - q) : 0; custoTotal += custo;
-          faltas.push({ l: l, falta: saiu - q, just: mot + (just ? ' — ' + just : ''), custo: custo });
+          faltas.push({ l: l, falta: saiu - q, just: mot + (just ? ' — ' + just : '') + (fts.length ? ' — ' + fts.length + (fts.length > 1 ? ' fotos' : ' foto') : ''), custo: custo });
         }
       });
       db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone, conferido_retorno: confRet });
@@ -1145,7 +1166,7 @@ var CORE = (function () {
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave',
       'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga'],
-    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
+    evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por', 'fotos'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
