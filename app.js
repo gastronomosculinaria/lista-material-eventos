@@ -450,7 +450,16 @@ var CORE = (function () {
       if (x.cpf !== undefined) dados.cpf = texto(x.cpf, 20);
       if (x.pix !== undefined) dados.pix = texto(x.pix, 120);
       if (dados.cpf) { if (!cpfOk(dados.cpf)) falha('CPF inválido. Confira os números.'); dados.cpf = fmtCpf(dados.cpf); }
-      if (dados.cpf) { var dup = porCpf(db, dados.cpf, x.id); if (dup) falha('Esse CPF já está no cadastro de ' + dup.nome + '.'); }
+      var dup = dados.cpf ? porCpf(db, dados.cpf, x.id) : null;
+      // Quem foi tirado do cadastro volta com os dados novos, em vez de travar pelo CPF repetido.
+      if (dup && dup.ativo === 'nao' && !x.id) {
+        dados.ativo = 'sim'; dados.revisado = 'sim';
+        if (!dados.rg) delete dados.rg; if (!dados.pix) delete dados.pix;
+        db.update('equipe', dup.id, dados);
+        log(db, quem, 'Voltou ao cadastro da equipe de eventos', nome);
+        return { id: dup.id };
+      }
+      if (dup) falha('Esse CPF já está no cadastro de ' + dup.nome + (dup.ativo === 'nao' ? ' (tirado do cadastro)' : '') + '.');
       if (x.revisado) dados.revisado = 'sim';
       if (x.id) {
         if (!porId(db.all('equipe'), x.id)) falha('Pessoa não encontrada.');
@@ -524,6 +533,12 @@ var CORE = (function () {
       var quemC = { nome: nome + ' [cadastro pelo link]', telefone: d.telefone };
       var ja = porCpf(db, d.cpf);
       if (ja && ja.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
+      if (ja && ja.ativo === 'nao') {
+        d.ativo = 'sim'; d.origem = ja.origem || 'link'; d.revisado = ''; d.atualizado_em = agora();
+        db.update('equipe', ja.id, d);
+        log(db, quemC, 'Voltou ao cadastro pelo link (tinha sido tirado)', nome);
+        return true;
+      }
       if (ja) falha('Esse CPF já tem cadastro. Para alterar seus dados, fale com a coordenação.');
       var mesmo = acharNaEquipe(db, nome);
       if (mesmo && mesmo.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
