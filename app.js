@@ -1020,7 +1020,7 @@ var CORE = (function () {
       });
       if (orig.serie !== serie) db.update('eventos', orig.id, { serie: serie });
       plano.forEach(function (x) {
-        db.update('eventos', x.d.id, { serie: serie });
+        db.update('eventos', x.d.id, { serie: serie, lista_estoque: 'sim' });
         db.removeWhere('evento_itens', function (l) { return l.evento_id === x.d.id; });
         x.novas.forEach(function (n) { db.insert('evento_itens', n); });
         sincAgenda(db, x.d.id, quem);
