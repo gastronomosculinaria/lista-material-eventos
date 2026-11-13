@@ -237,6 +237,12 @@ var CORE = (function () {
     return true;
   }
   function fmtCpf(c) { c = digitos(c); return c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9); }
+  // Link de cadastro de uso único: ainda não usado nem cancelado.
+  function conviteValido(db, chave) {
+    var c = porId(db.all('convites'), texto(chave, 40));
+    if (!c || c.usado_em || c.cancelado) falha('Este link de cadastro já foi usado ou não vale mais. Peça um link novo à Shirlei, à Fabiana ou ao Master.');
+    return c;
+  }
   function porCpf(db, cpf, exceto) { var d = digitos(cpf); return d ? db.all('equipe').filter(function (x) { return x.id !== exceto && digitos(x.cpf) === d; })[0] || null : null; }
   // Dados pessoais (RG, CPF, Pix) não vão no carregar: só pela ficha, para a coordenação.
   function resumoEquipe(x) {
@@ -555,17 +561,45 @@ var CORE = (function () {
       return true;
     },
 
-    // Link de cadastro para pessoas novas preencherem os próprios dados. "nova" troca a chave e o link antigo para de funcionar.
+    // Links de cadastro de uso único. Só a coordenação da equipe e o Master geram.
+    // Com equipe_id, o link serve para atualizar o cadastro daquela pessoa; sem, para uma pessoa nova.
+    // Cada link vale para um cadastro só e para de funcionar depois do envio.
     linkCadastro: function (db, p, s, quem) {
       pedeEscala(s);
-      var k = getConfig(db, 'cadastro_chave');
-      if (!k || p.nova) { k = chaveNova(); setConfig(db, 'cadastro_chave', k); if (p.nova) log(db, quem, 'Gerou novo link de cadastro', 'o link anterior deixou de funcionar'); }
-      return { chave: k };
+      var alvo = p.equipe_id ? porId(db.all('equipe'), p.equipe_id) : null;
+      if (p.equipe_id && !alvo) falha('Pessoa não encontrada.');
+      if (alvo && alvo.bloqueado === 'sim') falha('Esta pessoa está bloqueada. Desbloqueie antes de mandar o link.');
+      var c = { id: chaveNova(), equipe_id: alvo ? alvo.id : '', para: alvo ? alvo.nome : texto(p.para, 80), criado_por: texto(s.nome || semCochete(quem.nome), 80), criado_em: agora(), usado_em: '', usado_por: '', cancelado: '' };
+      db.insert('convites', c);
+      log(db, quem, alvo ? 'Gerou link para atualizar cadastro' : 'Gerou link de cadastro de pessoa nova', (c.para || 'sem nome') + ' (vale para um cadastro só)');
+      return { chave: c.id, para: c.para, atualizar: !!alvo };
+    },
+
+    linksCadastro: function (db, p, s) {
+      pedeEscala(s);
+      return db.all('convites').filter(function (c) { return !c.usado_em && !c.cancelado; })
+        .sort(function (a, b) { return String(b.criado_em).localeCompare(String(a.criado_em)); })
+        .map(function (c) { return { chave: c.id, para: c.para || '', atualizar: !!c.equipe_id, criado_por: c.criado_por || '', criado_em: c.criado_em || '' }; });
+    },
+
+    cancelarLink: function (db, p, s, quem) {
+      pedeEscala(s);
+      var c = porId(db.all('convites'), texto(p.chave, 40));
+      if (!c || c.usado_em || c.cancelado) falha('Este link já foi usado ou cancelado.');
+      db.update('convites', c.id, { cancelado: agora() });
+      log(db, quem, 'Cancelou link de cadastro', c.para || 'sem nome');
+      return true;
+    },
+
+    // O formulário público confere o link antes de mostrar os campos.
+    verCadastro: function (db, p) {
+      var c = conviteValido(db, p.chave);
+      var alvo = c.equipe_id ? porId(db.all('equipe'), c.equipe_id) : null;
+      return { atualizar: !!alvo, nome: alvo ? String(alvo.nome).trim().split(/\s+/)[0] : '' };
     },
 
     cadastroNovo: function (db, p, s, quem) {
-      var k = getConfig(db, 'cadastro_chave');
-      if (!k || texto(p.chave, 40) !== k) falha('Link de cadastro inválido ou antigo. Peça o link novo à coordenação.');
+      var conv = conviteValido(db, p.chave);
       var x = p.pessoa || {}, nome = texto(x.nome, 120).replace(/\s+/g, ' ');
       var d = { nome: nome, rg: texto(x.rg, 30), cpf: texto(x.cpf, 20), telefone: texto(x.telefone, 30), funcao: texto(x.funcao, 40), pix: texto(x.pix, 120) };
       if (partesNome(nome).length < 2) falha('Digite seu nome completo.');
@@ -575,28 +609,38 @@ var CORE = (function () {
       if (!d.funcao) falha('Informe sua função.');
       if (d.pix.length < 5) falha('Digite sua chave Pix.');
       d.cpf = fmtCpf(d.cpf);
-      var quemC = { nome: nome + ' [cadastro pelo link]', telefone: d.telefone };
+      var quemC = { nome: nome + ' [cadastro pelo link de ' + (conv.criado_por || 'coordenação') + ']', telefone: d.telefone };
+      function usado() { db.update('convites', conv.id, { usado_em: agora(), usado_por: nome }); }
+      var alvo = conv.equipe_id ? porId(db.all('equipe'), conv.equipe_id) : null;
       var ja = porCpf(db, d.cpf);
+      if (alvo) {
+        // Link feito para uma pessoa: só ela usa (o CPF tem que ser o do cadastro).
+        if (alvo.cpf && digitos(alvo.cpf) !== digitos(d.cpf) || ja && ja.id !== alvo.id) {
+          log(db, quemC, 'Link de atualização recusado (CPF não confere)', alvo.nome);
+          falha('O CPF não confere com o cadastro para o qual este link foi feito. Fale com quem mandou o link.');
+        }
+        ja = alvo;
+      }
       if (ja && ja.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
       if (ja && ja.ativo === 'nao') {
         // Tinha sido tirado do cadastro: volta com os dados novos, para a coordenação conferir.
         d.ativo = 'sim'; d.origem = 'link'; d.revisado = ''; d.pendente = ''; d.atualizado_em = agora();
-        db.update('equipe', ja.id, d);
+        db.update('equipe', ja.id, d); usado();
         log(db, quemC, 'Voltou ao cadastro pelo link (tinha sido tirado)', nome);
         return { atualizado: true, aguardando: true };
       }
-      if (ja) {
-        // Mesmo CPF: os dados novos ficam guardados e só valem depois que a coordenação ou o Master aprovar.
-        db.update('equipe', ja.id, { pendente: JSON.stringify({ nome: d.nome, rg: d.rg, telefone: d.telefone, funcao: d.funcao, pix: d.pix, em: agora() }) });
+      if (ja && ja.cpf) {
+        // Já tinha cadastro: os dados novos ficam guardados e só valem depois que a coordenação ou o Master aprovar.
+        db.update('equipe', ja.id, { pendente: JSON.stringify({ nome: d.nome, rg: d.rg, telefone: d.telefone, funcao: d.funcao, pix: d.pix, em: agora() }) }); usado();
         log(db, quemC, 'Pediu atualização do próprio cadastro pelo link', ja.nome + (pixIgual(ja.pix, d.pix) ? '' : ' (quer trocar o Pix)'));
         return { atualizado: true, aguardando: true };
       }
-      var mesmo = acharNaEquipe(db, nome);
+      var mesmo = ja || acharNaEquipe(db, nome);
       if (mesmo && mesmo.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
       d.ativo = 'sim'; d.origem = 'link'; d.revisado = ''; d.atualizado_em = agora();
-      if (mesmo && !mesmo.cpf) { db.update('equipe', mesmo.id, d); log(db, quemC, 'Completou o próprio cadastro pelo link', nome); return true; }
+      if (mesmo && !mesmo.cpf) { db.update('equipe', mesmo.id, d); usado(); log(db, quemC, 'Completou o próprio cadastro pelo link', nome); return true; }
       d.id = uid(); d.criado_em = agora();
-      db.insert('equipe', d);
+      db.insert('equipe', d); usado();
       log(db, quemC, 'Fez o próprio cadastro pelo link', nome);
       return true;
     },
@@ -1082,6 +1126,7 @@ var CORE = (function () {
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
     equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala', 'link_em', 'pix_anterior', 'pendente'],
     escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
+    convites: ['id', 'equipe_id', 'para', 'criado_por', 'criado_em', 'usado_em', 'usado_por', 'cancelado'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
   };

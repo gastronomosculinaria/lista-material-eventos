@@ -21,8 +21,8 @@ function configurar() {
 
 // Leituras não esperam na fila; ações que gravam usam a trava e já devolvem os dados atualizados
 // (estado), poupando uma segunda ida ao servidor.
-var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
-var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1, fichaEquipe: 1, linkCadastro: 1, cadastroNovo: 1 };
+var LEITURAS_ = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1, linksCadastro: 1, verCadastro: 1 };
+var SEM_ESTADO_ = { entrar: 1, login: 1, sair: 1, entrarEvento: 1, fichaEquipe: 1, linkCadastro: 1, cadastroNovo: 1, cancelarLink: 1 };
 // RG, CPF e Pix não ficam guardados no cache de repetição
 var SEM_CACHE_ = { fichaEquipe: 1 };
 function api(acao, payload) {
