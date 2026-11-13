@@ -244,6 +244,11 @@ var CORE = (function () {
       novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x), atualizado: x.link_em ? String(x.link_em).slice(0, 10) : '', pendente: !!x.pendente };
   }
   // Nome como é chamado no Montador de Escala ("Ana Souza"); sem cadastro, primeiro + último nome.
+  // Equipe do evento sempre em ordem alfabética pelo nome que aparece na escala.
+  function ordemNome(l) {
+    var k = function (x) { return String(x.apelido || curto(x.nome)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+    return l.slice().sort(function (a, b) { var x = k(a), y = k(b); return x < y ? -1 : x > y ? 1 : 0; });
+  }
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
   function nomeEscala(x) { return x.nome_escala || curto(x.nome); }
   // Liga os nomes usados no Montador ao cadastro: primeiro nome igual e todas as palavras contidas no nome completo.
@@ -316,7 +321,7 @@ var CORE = (function () {
   }
   // Aba "escalas" da planilha: uma linha por pessoa do evento; o Montador de Escala lê daqui para montar os pagamentos da semana.
   function sincEscalas(db, ev, por) {
-    var prest = json(ev.prestadores, []), em = agora(), sem = semanaEscala(ev.data);
+    var prest = ordemNome(json(ev.prestadores, [])), em = agora(), sem = semanaEscala(ev.data);
     var linhas = prest.map(function (x, i) {
       return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
         funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
@@ -410,7 +415,7 @@ var CORE = (function () {
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
-          prestadores: json(e.prestadores, []).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
+          prestadores: ordemNome(json(e.prestadores, [])).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
