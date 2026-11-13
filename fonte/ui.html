@@ -322,9 +322,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     return (S.data.eventos || []).filter(function (y) { return y.serie === ev.serie && y.id !== ev.id; })
       .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
   }
+  // O que foi para o evento: lista fechada + extras enviados depois.
+  function tot(l) { return l.qtd_saida + (l.qtd_extra || 0); }
   function ficouNoLocal(ev) { return ev.status === 'concluido' && /^Ficou no local/.test(ev.retorno_por || ''); }
   function statusTxt(ev) { return ficouNoLocal(ev) ? 'Ficou no local' : STATUS[ev.status] || ''; }
-  function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord); }
+  function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord && !ev.lista_estoque); }
+  function podeReabrir(ev) { var s = sess(); return s && (s.estoque || s.separa) ? true : !ev.lista_estoque && (s ? !!s.escala : podeLista(ev)); }
   // "Ana Paula de Souza Lima" -> "Ana Lima"
   var SETORES = ['Salão', 'Cozinha', 'Lavagem', 'Frete', 'Barman'];
   function setorDe(f) { var m = /^\s*(Salão|Cozinha|Lavagem|Frete|Barman)/i.exec(String(f || '')); return m ? SETORES.filter(function (x) { return x.toLowerCase() === m[1].toLowerCase(); })[0] : 'Salão'; }
@@ -509,7 +512,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.4 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.5 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -517,9 +520,11 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var pe = s.escala ? escalasPend() : [], nc = s.escala ? (d.equipe || []).filter(function (x) { return x.novo || x.pendente; }).length : 0;
     if (nc) h = '<button class="li" id="t-nc" style="margin-bottom:14px"><div class="mid"><div class="nm">' + nc + (nc > 1 ? ' cadastros' : ' cadastro') + ' pelo link para aprovar</div><div class="hint">Novos ou atualizados. Só valem depois de aprovados.</div></div><span class="btn">Ver</span></button>' + h;
     if (pe.length) h = '<button class="li" id="t-es" style="margin-bottom:14px"><div class="mid"><div class="nm">' + pe.length + (pe.length > 1 ? ' escalas' : ' escala') + ' para confirmar</div><div class="hint">Próximo prazo: terça ' + dataBR(pe[0].prazo_escala) + '</div></div><span class="btn">Ver</span></button>' + h;
+    (d.chegadas || []).forEach(function (id) { var y = evento(id); if (y) h = '<button class="li" data-chq="' + y.id + '" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">Conferência de chegada com diferença</div><div class="hint">' + esc(y.nome) + ' · ' + dataBR(y.data) + '</div></div><span class="btn">Ver</span></button>' + h; });
     if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
     if ($('t-inv')) $('t-inv').onclick = function () { ir('inventario'); };
+    document.querySelectorAll('[data-chq]').forEach(function (x) { x.onclick = function () { ir('evento', { id: x.dataset.chq }); }; });
     if ($('t-es')) $('t-es').onclick = function () { ir('escalas'); };
     if ($('t-esc')) $('t-esc').onclick = function () { ir('escalaEventos'); };
     if ($('t-cm')) $('t-cm').onclick = function () { ir('contagem'); };
@@ -658,7 +663,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         : '<dt>Categoria</dt><dd>' + esc(i.categoria) + '</dd><dt>Total</dt><dd>' + i.qtd_total + '</dd><dt>No depósito</dt><dd>' + i.disponivel + '</dd>') +
       (i.custo ? '<dt>Reposição</dt><dd>' + moeda(i.custo) + ' por unidade</dd>' : '') +
       (i.descricao ? '<dt>Descrição</dt><dd>' + esc(i.descricao) + '</dd>' : '') +
-      (emUso.length ? '<dt>Em eventos</dt><dd>' + emUso.map(function (e) { var l = e.linhas.filter(function (x) { return x.item_id === id; })[0]; return l.qtd_saida + ' em ' + esc(e.nome); }).join('<br>') + '</dd>' : '') + '</dl>' +
+      (emUso.length ? '<dt>Em eventos</dt><dd>' + emUso.map(function (e) { var l = e.linhas.filter(function (x) { return x.item_id === id; })[0]; return tot(l) + ' em ' + esc(e.nome); }).join('<br>') + '</dd>' : '') + '</dl>' +
       '<div id="mx"></div><div class="row" style="margin-top:18px">' +
       (s && s.inventario ? '<button class="btn" id="m-ed">Editar</button><button class="btn" id="m-bx">Dar baixa</button><button class="btn danger" id="m-ex">Excluir</button>' : '') +
       '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
@@ -957,8 +962,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       return oa - ob || (oa ? String(b.data).localeCompare(a.data) : String(a.data).localeCompare(b.data));
     });
     $('app').innerHTML = evs.length ? '<div class="list">' + evs.map(function (e) {
-      var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
-      var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < l.qtd_saida; });
+      var pecas = e.linhas.reduce(function (t, l) { return t + tot(l); }, 0);
+      var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < tot(l); });
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
         '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : statusTxt(e)) + '</span></button>';
     }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
@@ -1280,9 +1285,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // O material fica no local: o dia "de" termina e o dia "para" recebe o material sem nova conferência.
   function passarMaterial(de, para) {
     var antes = {}, mais = [], menos = [];
-    de.linhas.forEach(function (l) { antes[l.item_id] = l.qtd_saida; });
+    de.linhas.forEach(function (l) { antes[l.item_id] = tot(l); });
     para.linhas.forEach(function (l) { var d = l.qtd_saida - (antes[l.item_id] || 0); if (d > 0) mais.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
-    de.linhas.forEach(function (l) { var p = para.linhas.filter(function (x) { return x.item_id === l.item_id; })[0], d = l.qtd_saida - (p ? p.qtd_saida : 0); if (d > 0) menos.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
+    de.linhas.forEach(function (l) { var p = para.linhas.filter(function (x) { return x.item_id === l.item_id; })[0], d = tot(l) - (p ? p.qtd_saida : 0); if (d > 0) menos.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
     function bloco(t, l) { return l.length ? '<p style="margin:10px 0 4px"><b>' + t + '</b></p><ul style="margin:0;padding-left:20px">' + l.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''; }
     $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Material fica no local"><h2>Material fica no local</h2>' +
       '<p>O material de <b>' + dataBR(de.data) + '</b> continua no local para <b>' + dataBR(para.data) + '</b>. O dia ' + dataBR(de.data).slice(0, 5) + ' fica encerrado sem contar o retorno; a conferência do retorno é feita no último dia.</p>' +
@@ -1299,11 +1304,11 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!e) { inicio(); return; }
     header(e.nome, true);
     var podeRet = e.status === 'em_evento' && (s || souPrestador(e));
-    var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+    var pecas = e.linhas.reduce(function (t, l) { return t + tot(l); }, 0);
     var perdas = { pecas: 0, valor: 0, semCusto: 0 };
     e.linhas.forEach(function (l) {
-      if (l.qtd_retorno == null || l.qtd_retorno >= l.qtd_saida) return;
-      var f = l.qtd_saida - l.qtd_retorno, it = item(l.item_id); perdas.pecas += f;
+      if (l.qtd_retorno == null || l.qtd_retorno >= tot(l)) return;
+      var f = tot(l) - l.qtd_retorno, it = item(l.item_id); perdas.pecas += f;
       if (it && it.custo) perdas.valor += f * it.custo; else perdas.semCusto++;
     });
     var podeCarga = s ? s.papel === 'master' || s.escala : souPrestador(e) && S.data.convite.coord;
@@ -1324,10 +1329,22 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (serieEv.length ? '<dt>Outros dias</dt><dd>' + serieEv.map(function (y) { return (y.outro ? '<b>' + dataBR(y.data) + '</b>' : '<a href="#" data-dia="' + y.id + '">' + dataBR(y.data) + '</a>') + ' <span class="hint">' + esc(statusTxt(y)) + '</span>'; }).join('<br>') +
         '<br><span class="hint">Mesmo material. A lista de cada dia pode ser alterada separadamente.</span></dd>' : '') +
       (e.separado_por ? '<dt>Saída</dt><dd>' + (/^Continuou no local/.test(e.conferido_saida) ? esc(e.conferido_saida) + '<br><span class="hint">Passado adiante por ' + esc(e.separado_por) + '</span>' : 'Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span>') + '</dd>' : '') +
+      (e.chegada_status ? '<dt>Chegada</dt><dd>' + (e.chegada_status === 'ok' ? 'Chegou tudo certo' : e.chegada_status === 'revisada' ? 'Diferença conferida pelo estoque' : '<b style="color:var(--bad)">Com diferença</b>') +
+        '<br><span class="hint">Conferido por ' + esc(e.chegada_por) + ', ' + quando(e.chegada_em) + (e.chegada_revisao ? '<br>Estoque: ' + esc(e.chegada_revisao) : '') + '</span></dd>' : '') +
       (e.status === 'concluido' ? '<dt>Retorno</dt><dd>' + esc(e.retorno_por) + (e.conferido_retorno ? '<br><span class="hint">Conferido por ' + esc(e.conferido_retorno) + '</span>' : '') + '<br><span class="hint">' + quando(e.concluido_em) + '</span></dd>' : '') +
       (s && perdas.pecas ? '<dt>Perdas</dt><dd><b style="color:var(--bad)">' + perdas.pecas + ' peças' + (perdas.valor ? ' · ' + moeda(perdas.valor) : '') + '</b>' +
         (perdas.semCusto ? '<br><span class="hint">' + perdas.semCusto + ' item(ns) sem custo de reposição cadastrado</span>' : '') + '</dd>' : '') + '</dl></div>';
+    var naEquipe = !!(s || souPrestador(e)), alu = e.aluguel;
+    if (e.chegada_status === 'diferenca' && s && (s.estoque || s.separa))
+      h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Diferença na chegada para conferir</b><p class="hint" style="margin:6px 0">Veja em cada item “Chegou” em vermelho' + (e.chegada_obs ? '. Obs. da equipe: ' + esc(e.chegada_obs) : '') + '.</p>' +
+        '<input type="text" id="rvn" placeholder="O que foi verificado (opcional)"><div class="row" style="margin-top:8px"><button class="btn primary" id="rvok">Marcar como conferido</button></div></div>';
     h += '<h2>Material</h2>';
+    if (e.status === 'em_evento' && naEquipe) h += '<div class="tools"><button class="btn' + (e.chegada_status ? '' : ' primary') + '" id="chg">' + (e.chegada_status ? 'Refazer conferência da chegada' : 'Conferir chegada') + '</button><button class="btn" id="xtr">+ Adicionar extra</button></div>';
+    if (temAluguel(alu)) h += '<div class="panel" style="margin:10px 0"><b>Material alugado</b>' + (alu.fornecedor ? ' · ' + esc(alu.fornecedor) : '') + fotosAlu(alu) +
+      (alu.itens.length ? '<ul style="margin:6px 0 0;padding-left:20px">' + alu.itens.map(function (x) { return '<li>' + esc(x.qtd) + ' × ' + esc(x.nome) + (x.chegada != null ? ' · chegou ' + esc(x.chegada) : '') + (x.retorno != null ? ' · voltou ' + esc(x.retorno) : '') + '</li>'; }).join('') + '</ul>' : '') +
+      (alu.obs ? '<p class="hint" style="margin:6px 0 0">' + esc(alu.obs) + '</p>' : '') + (alu.chegada_ok ? '<p class="hint" style="margin:6px 0 0">Chegada conferida por ' + esc(alu.chegada_ok) + '</p>' : '') +
+      (s && (s.estoque || s.separa) && e.status !== 'concluido' ? '<div style="margin-top:8px"><button class="btn" id="alu">Alterar material alugado</button></div>' : '') + '</div>';
+    else if (s && (s.estoque || s.separa) && e.status !== 'concluido') h += '<div class="tools"><button class="btn" id="alu">+ Material alugado</button></div>';
     var gEv = agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); });
     var aba = S.p.aba || 'Todos';
     if (e.linhas.length) h += '<div class="tools"><button class="btn" id="imp">Imprimir</button><button class="btn" id="cop">Copiar para WhatsApp</button>' +
@@ -1335,22 +1352,24 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (gEv.length > 1 ? chipsGrupos(gEv.map(function (g) { return g[0]; }), aba, 'data-aba') : '');
     function linhaEv(l) {
       var it = item(l.item_id) || { nome: l.nome };
-      var ret = l.qtd_retorno != null && !ficouNoLocal(e), falt = ret && l.qtd_retorno < l.qtd_saida;
+      var ret = l.qtd_retorno != null && !ficouNoLocal(e), falt = ret && l.qtd_retorno < tot(l), ch = l.qtd_chegada, chDif = ch != null && ch !== tot(l);
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(it)) + '</div>' +
-        '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
-        (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
+        '<div class="qty">' + (l.qtd_saida ? 'Saiu <b>' + l.qtd_saida + '</b>' : '') + (l.qtd_extra ? (l.qtd_saida ? ' · ' : '') + '<b>+' + l.qtd_extra + ' extra</b>' : '') +
+        (ch != null ? ' · Chegou <b' + (chDif ? ' style="color:var(--bad)"' : '') + '>' + ch + '</b>' : '') + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
+        (l.qtd_extra && l.extra_por ? '<div class="hint">Extra pedido por ' + esc(l.extra_por) + '</div>' : '') +
+        (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (tot(l) - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
           ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' + fotosFalta(l) : '') + '</div>' +
-        (falt ? '<span class="pill falta">−' + (l.qtd_saida - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
+        (falt ? '<span class="pill falta">−' + (tot(l) - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
     }
     if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
     else h += gEv.filter(function (g) { return aba === 'Todos' || g[0] === aba; }).map(function (g) {
-      var pc = g[1].reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+      var pc = g[1].reduce(function (t, l) { return t + tot(l); }, 0);
       return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + porSub(g[0], g[1], itemDaLinha, linhaEv, '<div class="list">', '</div>');
     }).join('');
     if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px">' + (s.papel === 'master' ? '<button class="btn" id="ed">Editar dados do evento</button>' : '') +
       (s.escala && e.prestadores.length ? (e.escala_status !== 'enviada' ? '<button class="btn primary" id="esc">Confirmar e enviar escala</button>' : s.papel === 'master' ? '<button class="btn" id="resc">Reabrir escala</button>' : '') : '') +
-      (!(s.estoque || s.escala || s.separa) || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : '<button class="btn" id="reab">Reabrir lista para correção</button>') + '</div><div id="mx"></div>';
-    else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
+      (!(s.estoque || s.escala || s.separa) || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : podeReabrir(e) ? '<button class="btn" id="reab">Reabrir lista para correção</button>' : '') + '</div><div id="mx"></div>';
+    else if (podeReabrir(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
     if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e) && e.linhas.length) bar('<button class="btn primary" id="psa">Receber o material de ' + dataBR(diaAnt.data).slice(0, 5) + '</button>');
@@ -1409,7 +1428,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       el.innerHTML = '<img class="plogo" src="__MARCA__/logo-terracota.png" alt=""><h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(statusTxt(e)) + '</div>' +
         gEv.map(function (g) {
           return '<h2>' + esc(g[0]) + '</h2>' + porSub(g[0], g[1], itemDaLinha, function (l) {
-            return '<li><span>☐</span><span class="q">' + l.qtd_saida + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
+            return '<li><span>☐</span><span class="q">' + l.qtd_saida + (l.qtd_extra ? '+' + l.qtd_extra : '') + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
           }, '<ul>', '</ul>').replace(/<h4 class="sub">/g, '<h3>').replace(/<\/h4>/g, '</h3>');
         }).join('') + '<div class="ass">Separado por: ' + (e.separado_por ? esc(e.separado_por) : '____________________') + ' &nbsp;·&nbsp; Conferido na saída por: ' + (e.conferido_saida ? esc(e.conferido_saida) : '____________________') +
           '<br><br>Retorno registrado por: ____________________ &nbsp;·&nbsp; Conferido na volta por: ____________________</div>';
@@ -1421,7 +1440,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           var ordem = [''].concat(subsDe(g[0])), mapa = {};
           g[1].forEach(function (l) { var sb = itemDaLinha(l).subgrupo || ''; if (ordem.indexOf(sb) < 0) ordem.push(sb); (mapa[sb] = mapa[sb] || []).push(l); });
           return '\n*' + g[0].toUpperCase() + '*' + ordem.filter(function (sb) { return mapa[sb]; }).map(function (sb) {
-            return (sb ? '\n_' + sb + '_' : '') + '\n' + mapa[sb].map(function (l) { return l.qtd_saida + ' × ' + nomeL(l); }).join('\n');
+            return (sb ? '\n_' + sb + '_' : '') + '\n' + mapa[sb].map(function (l) { return l.qtd_saida + (l.qtd_extra ? ' + ' + l.qtd_extra + ' extra' : '') + ' × ' + nomeL(l); }).join('\n');
           }).join('');
         }).join('\n');
       function mostrar() {
@@ -1436,6 +1455,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       });
     };
     if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
+    if ($('chg')) $('chg').onclick = function () { ir('chegada', { id: e.id }); };
+    if ($('xtr')) $('xtr').onclick = function () { ir('extra', { id: e.id }); };
+    if ($('alu')) $('alu').onclick = function () { ir('aluguel', { id: e.id }); };
+    if ($('rvok')) $('rvok').onclick = function () { fazer(this, api('revisarChegada', { id: e.id, nota: $('rvn').value }), function () { toast('Conferência marcada como vista'); render(); }); };
     document.querySelectorAll('[data-dia]').forEach(function (a) { a.onclick = function (x) { x.preventDefault(); ir('evento', { id: a.dataset.dia }); }; });
     if ($('rep')) $('rep').onclick = function () { repetirLista(e); };
     if ($('psp')) $('psp').onclick = function () { passarMaterial(e, proxDia); };
@@ -1455,7 +1478,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!S.p.ini) {
       var rasc = ls(chave);
       if (rasc) { S.p.qtd = rasc; toast('Rascunho recuperado'); }
-      else { S.p.qtd = {}; e.linhas.forEach(function (l) { S.p.qtd[l.item_id] = l.qtd_saida; }); }
+      else { S.p.qtd = {}; e.linhas.forEach(function (l) { if (l.qtd_saida) S.p.qtd[l.item_id] = l.qtd_saida; }); }
       S.p.ini = true;
     }
     var qtd = S.p.qtd;
@@ -1469,7 +1492,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var k = y.serie || y.id;
       y.linhas.forEach(function (l) {
         var x = conf[l.item_id] || (conf[l.item_id] = { qtd: 0, evs: [] }), mk = l.item_id + '|' + k, ant = maxSerie[mk] || 0;
-        if (l.qtd_saida > ant) { x.qtd += l.qtd_saida - ant; maxSerie[mk] = l.qtd_saida; }
+        if (tot(l) > ant) { x.qtd += tot(l) - ant; maxSerie[mk] = tot(l); }
         if (x.evs.indexOf(y.nome) < 0) x.evs.push(y.nome);
       });
     });
@@ -1548,24 +1571,25 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<div class="tools"><button class="btn" id="tudo">Voltou tudo certo</button><button class="btn" id="qr">📷 Ler QR</button></div><div style="height:6px"></div>' +
       agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
         var it = item(l.item_id) || { nome: l.nome }, id = l.item_id, cons = consumo(id), eq = ehEq(it);
-        return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div><div class="qty">Saiu <b>' + l.qtd_saida + '</b></div></div>' +
+        return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div><div class="qty">Saiu <b>' + tot(l) + '</b></div></div>' +
           (eq ? '<input type="hidden" id="v-' + id + '"><div class="seg" style="flex:none;width:180px"><button type="button" class="ok" data-ev1="' + id + '">Voltou</button><button type="button" class="no" data-ev0="' + id + '">Não voltou</button></div>'
-          : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
+          : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" max="' + tot(l) + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
           '<div data-j="' + id + '" hidden><label class="f" style="margin-top:0" for="m-' + id + '">Motivo</label><select id="m-' + id + '" data-mm="' + id + '">' +
           (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>' +
           '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea>' +
           '<div class="fts" id="fs-' + id + '"></div><label class="btn" style="margin-top:8px" for="fi-' + id + '" id="fl-' + id + '">📷 Adicionar foto</label><input type="file" accept="image/*" id="fi-' + id + '" data-ff="' + id + '" hidden>' +
           '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div></div>';
       }, '<div class="list">', '</div>'); }).join('') +
+      blocoAluguel(e.aluguel, 'retorno') +
       '<label class="f" for="cfr">Quem conferiu o retorno com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
       '<datalist id="cfl">' + nomesEquipe(e) + '</datalist><div id="erro" class="err" hidden></div>';
     function linha(id) { return e.linhas.filter(function (x) { return x.item_id === id; })[0]; }
     function upd(id) {
-      var l = linha(id), v = $('v-' + id).value, falta = v !== '' && +v < l.qtd_saida;
+      var l = linha(id), v = $('v-' + id).value, falta = v !== '' && +v < tot(l);
       document.querySelector('[data-j="' + id + '"]').hidden = !falta;
       $('r-' + id).classList.toggle('short', falta && !consumo(id));
       var b1 = document.querySelector('[data-ev1="' + id + '"]'), b0 = document.querySelector('[data-ev0="' + id + '"]');
-      if (b1) { b1.classList.toggle('on', v !== '' && +v >= l.qtd_saida); b0.classList.toggle('on', falta); }
+      if (b1) { b1.classList.toggle('on', v !== '' && +v >= tot(l)); b0.classList.toggle('on', falta); }
     }
     function fotos(id) {
       var l = R.f[id] || [];
@@ -1598,7 +1622,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       };
     });
     $('cfr').oninput = function () { R.c = this.value; guardar(); }; ligarSozinho('cfrso', 'cfr');
-    $('tudo').onclick = function () { e.linhas.forEach(function (l) { setV(l.item_id, l.qtd_saida); }); };
+    $('tudo').onclick = function () { e.linhas.forEach(function (l) { setV(l.item_id, tot(l)); }); };
+    ligarAluguel(e.aluguel);
     $('qr').onclick = function () {
       lerQR(function (txt) {
         var c = codigoQR(txt);
@@ -1607,9 +1632,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         if (c.grupo) { var h = document.querySelector('h3.grp'); var alvo = [].filter.call(document.querySelectorAll('h3.grp'), function (x) { return x.firstChild && x.firstChild.textContent.trim() === c.grupo; })[0]; if (alvo) alvo.scrollIntoView(); return 'Caixa: ' + c.grupo; }
         var l = linha(c.item.id);
         if (!l) return nomeIt(c.item) + ' não saiu neste evento.';
-        var atual = +($('v-' + l.item_id).value || 0), novo = Math.min(l.qtd_saida, atual + 1);
+        var atual = +($('v-' + l.item_id).value || 0), novo = Math.min(tot(l), atual + 1);
         setV(l.item_id, novo);
-        return nomeIt(c.item) + ': voltou ' + novo + ' de ' + l.qtd_saida;
+        return nomeIt(c.item) + ': voltou ' + novo + ' de ' + tot(l);
       });
     };
     bar('<button class="btn primary" id="ok">Enviar retorno</button>');
@@ -1618,7 +1643,133 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       S.erro = !cf ? 'Informe quem conferiu o retorno com você ou marque que conferiu sozinho.' : '';
       if (S.erro) { mostrarErro(); return; }
       var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value, fotos: R.f[id] || [] }; });
-      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf, sozinho: so }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
+      var al = lerAluguel(e.aluguel); if (al.erro) { S.erro = al.erro; mostrarErro(); return; }
+      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf, sozinho: so, aluguel: al.itens, aluguel_ok: al.ok }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
+    };
+  };
+
+  // ---- Material alugado (fora do nosso estoque) ----
+  function temAluguel(a) { return !!(a && (a.itens.length || a.fotos.length)); }
+  function fotosAlu(a) { return a && a.fotos.length ? '<div class="fts">' + a.fotos.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Folha do material alugado" loading="lazy"></a>'; }).join('') + '</div>' : ''; }
+  // Bloco de conferência do alugado nas telas de chegada e de retorno.
+  function blocoAluguel(a, modo) {
+    if (!temAluguel(a)) return '';
+    var rot = modo === 'chegada' ? 'Chegou' : 'Voltou';
+    return cabGrupo('Material alugado', a.fornecedor || null) + '<p class="hint" style="margin:0 0 8px">Não é nosso: confira com a folha do fornecedor (toque na foto para ampliar).</p>' + fotosAlu(a) +
+      (a.itens.length ? '<div class="list">' + a.itens.map(function (x) {
+        return '<div class="ret"><div class="top"><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(x.nome) + '</div><div class="qty">Alugado <b>' + esc(x.qtd) + '</b>' +
+          (modo === 'retorno' && x.chegada != null ? ' · chegou ' + esc(x.chegada) : '') + '</div></div><div><label class="hint" for="al-' + esc(x.id) + '">' + rot + '</label>' +
+          '<input type="number" min="0" inputmode="numeric" id="al-' + esc(x.id) + '" data-al="' + esc(x.id) + '" style="width:84px;text-align:center"></div></div></div>';
+      }).join('') + '</div><button type="button" class="btn" id="altudo" style="margin-top:8px">Alugado: ' + (modo === 'chegada' ? 'chegou' : 'voltou') + ' tudo certo</button>'
+      : '<label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="alok" style="width:22px;height:22px;flex:none"> Conferi o material alugado com a folha: ' + (modo === 'chegada' ? 'chegou tudo' : 'voltou tudo') + '</label>');
+  }
+  function ligarAluguel(a) {
+    if ($('altudo')) $('altudo').onclick = function () { a.itens.forEach(function (x) { $('al-' + x.id).value = x.qtd; }); };
+  }
+  function lerAluguel(a) {
+    if (!temAluguel(a)) return { itens: [], ok: false };
+    if (!a.itens.length) return $('alok').checked ? { itens: [], ok: true } : { erro: 'Marque que conferiu o material alugado com a folha.' };
+    var r = [], falta = '';
+    a.itens.forEach(function (x) { var v = $('al-' + x.id).value; if (v === '' && !falta) falta = x.nome; r.push({ id: x.id, qtd: v }); });
+    return falta ? { erro: 'Material alugado: informe a quantidade de "' + falta + '".' } : { itens: r, ok: true };
+  }
+
+  // Conferência na chegada: a equipe confirma se o material separado pelo estoque chegou certo.
+  V.chegada = function () {
+    var e = evento(S.p.id);
+    header('Chegada: ' + e.nome, true);
+    var chave = 'rc-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {} });
+    function guardar() { ls(chave, R); }
+    $('app').innerHTML = '<p class="sub">Conte o que chegou no evento. Se algo veio diferente da lista, a diferença vai para o estoque conferir. A lista de saída não muda.</p>' +
+      '<div class="tools"><button class="btn" id="tudo">Chegou tudo certo</button></div><div style="height:6px"></div>' +
+      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
+        var it = item(l.item_id) || { nome: l.nome }, id = l.item_id;
+        return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div>' +
+          '<div class="qty">Saiu <b>' + tot(l) + '</b>' + (l.qtd_extra ? ' <span class="hint">(' + l.qtd_extra + ' extra)</span>' : '') + '</div></div>' +
+          '<div><label class="hint" for="v-' + id + '">Chegou</label><input type="number" min="0" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div></div></div>';
+      }, '<div class="list">', '</div>'); }).join('') + blocoAluguel(e.aluguel, 'chegada') +
+      '<label class="f" for="cob">Observação (opcional)</label><textarea id="cob" placeholder="Ex.: 2 taças chegaram quebradas"></textarea><div id="erro" class="err" hidden></div>';
+    function upd(id) { var l = e.linhas.filter(function (x) { return x.item_id === id; })[0], v = $('v-' + id).value; $('r-' + id).classList.toggle('short', v !== '' && +v !== tot(l)); }
+    e.linhas.forEach(function (l) { var v = R.v[l.item_id] != null ? R.v[l.item_id] : (l.qtd_chegada != null ? l.qtd_chegada : ''); $('v-' + l.item_id).value = v; upd(l.item_id); });
+    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); }; });
+    $('tudo').onclick = function () { e.linhas.forEach(function (l) { $('v-' + l.item_id).value = tot(l); R.v[l.item_id] = tot(l); upd(l.item_id); }); guardar(); };
+    if (e.aluguel) e.aluguel.itens.forEach(function (x) { if ($('al-' + x.id) && x.chegada != null) $('al-' + x.id).value = x.chegada; });
+    ligarAluguel(e.aluguel);
+    bar('<button class="btn primary" id="ok">Enviar conferência</button>');
+    $('ok').onclick = function () {
+      var falta = e.linhas.filter(function (l) { return $('v-' + l.item_id).value === ''; })[0];
+      if (falta) { S.erro = 'Informe quantos chegaram de "' + nomeIt(item(falta.item_id) || { nome: falta.nome }) + '" (ou toque em “Chegou tudo certo”).'; mostrarErro(); return; }
+      var al = lerAluguel(e.aluguel); if (al.erro) { S.erro = al.erro; mostrarErro(); return; }
+      var linhas = e.linhas.map(function (l) { return { item_id: l.item_id, qtd: $('v-' + l.item_id).value }; });
+      fazer(this, api('conferirChegada', { id: e.id, linhas: linhas, aluguel: al.itens, aluguel_ok: al.ok, obs: $('cob').value }), function (r) {
+        ls(chave, null); toast(r && r.difs ? 'Conferência enviada. As diferenças foram para o estoque.' : 'Conferência enviada: chegou tudo certo.'); voltar();
+      });
+    };
+  };
+
+  // Material extra: enviado ou pedido depois que a lista foi fechada. Não altera a lista de saída.
+  V.extra = function () {
+    var e = evento(S.p.id);
+    header('Extra: ' + e.nome, true);
+    var qtd = S.p.qtd || (S.p.qtd = {});
+    $('app').innerHTML = '<p class="sub">Material que foi enviado ou pedido depois do início do evento. Entra como extra; a lista fechada de saída continua igual.</p>' + busca() + '<div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
+    function desenhar() {
+      var l = filtrar(S.data.itens || []).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || cmpNome(a, b); }).slice(0, 150);
+      $('lst').innerHTML = l.length ? l.map(function (i) {
+        var q = qtd[i.id] || 0, ja = e.linhas.filter(function (x) { return x.item_id === i.id; })[0];
+        return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(i)) + '</div><div class="qty">' + (ja ? 'No evento: ' + tot(ja) : 'Fora da lista') + '</div></div>' +
+          '<div class="stepper"><button type="button" data-m="' + i.id + '" aria-label="Menos">−</button><input type="number" min="0" inputmode="numeric" data-q="' + i.id + '" value="' + (q || '') + '" placeholder="0" aria-label="Quantidade extra de ' + esc(nomeIt(i)) + '">' +
+          '<button type="button" data-p="' + i.id + '" aria-label="Mais">+</button></div></div>';
+      }).join('') : '<div class="empty">Nenhum item encontrado.</div>';
+      document.querySelectorAll('[data-m]').forEach(function (b) { b.onclick = function () { set(b.dataset.m, (qtd[b.dataset.m] || 0) - 1); }; });
+      document.querySelectorAll('[data-p]').forEach(function (b) { b.onclick = function () { set(b.dataset.p, (qtd[b.dataset.p] || 0) + 1); }; });
+      document.querySelectorAll('[data-q]').forEach(function (x) { x.onchange = function () { set(x.dataset.q, parseInt(x.value, 10)); }; });
+    }
+    function set(id, v) { qtd[id] = Math.max(0, v || 0); var inp = document.querySelector('[data-q="' + id + '"]'); if (inp) inp.value = qtd[id] || ''; total(); }
+    function total() { var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } }); $('tot').textContent = n + ' itens · ' + p + ' peças'; }
+    bar('<span id="tot" class="hint" style="flex:1"></span><button class="btn primary" id="ok">Adicionar extra</button>');
+    ligarBusca(desenhar); desenhar(); total();
+    $('ok').onclick = function () {
+      var linhas = Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).map(function (k) { return { item_id: k, qtd: qtd[k] }; });
+      if (!linhas.length) { toast('Escolha pelo menos um item.'); return; }
+      fazer(this, api('adicionarExtra', { id: e.id, linhas: linhas }), function () { toast('Extra adicionado ao evento'); voltar(); });
+    };
+  };
+
+  // Material alugado: o estoque fotografa a folha do fornecedor e, se quiser, digita os itens.
+  V.aluguel = function () {
+    var e = evento(S.p.id);
+    header('Alugado: ' + e.nome, true);
+    var a = S.p.a || (S.p.a = JSON.parse(JSON.stringify(e.aluguel || { fornecedor: '', obs: '', fotos: [], itens: [] })));
+    function desenhar() {
+      $('app').innerHTML = '<p class="sub">Material alugado fica à parte do nosso estoque. Tire foto da folha do fornecedor; a equipe confere na chegada e no retorno.</p>' +
+        '<label class="f" for="afo">Fornecedor</label><input type="text" id="afo" value="' + esc(a.fornecedor) + '" placeholder="Nome da locadora">' +
+        '<h3 style="margin:18px 0 6px">Foto da folha</h3>' + (a.fotos.length ? '<div class="fts">' + a.fotos.map(function (u, i) { return '<span style="position:relative;display:inline-block"><a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Folha ' + (i + 1) + '"></a><button type="button" class="chip" data-rf="' + i + '" style="position:absolute;top:-6px;right:-6px;padding:2px 7px" aria-label="Tirar foto">×</button></span>'; }).join('') + '</div>' : '<p class="hint">Nenhuma foto ainda.</p>') +
+        '<label class="btn" for="afi" id="afl" style="margin-top:8px">📷 Foto da folha</label><input type="file" accept="image/*" id="afi" hidden>' +
+        '<h3 style="margin:18px 0 6px">Itens alugados</h3><p class="hint" style="margin:0 0 6px">Opcional: digitando os itens, a equipe conta cada um na chegada e no retorno. Sem itens, ela confere pela foto.</p>' +
+        '<div id="ail">' + a.itens.map(function (x, i) { return '<div class="row" style="gap:8px;margin-bottom:6px"><input type="text" data-an="' + i + '" value="' + esc(x.nome) + '" placeholder="Item" style="flex:1"><input type="number" min="0" inputmode="numeric" data-aq="' + i + '" value="' + esc(x.qtd) + '" style="width:80px;text-align:center"><button type="button" class="btn" data-ax="' + i + '" aria-label="Tirar item">×</button></div>'; }).join('') + '</div>' +
+        '<button type="button" class="btn" id="aadd">+ Item</button>' +
+        '<label class="f" for="aob">Observação</label><textarea id="aob">' + esc(a.obs) + '</textarea><div id="erro" class="err" hidden></div>';
+      $('afo').oninput = function () { a.fornecedor = this.value; };
+      $('aob').oninput = function () { a.obs = this.value; };
+      document.querySelectorAll('[data-an]').forEach(function (x) { x.oninput = function () { a.itens[+x.dataset.an].nome = x.value; }; });
+      document.querySelectorAll('[data-aq]').forEach(function (x) { x.oninput = function () { a.itens[+x.dataset.aq].qtd = x.value; }; });
+      document.querySelectorAll('[data-ax]').forEach(function (b) { b.onclick = function () { a.itens.splice(+b.dataset.ax, 1); desenhar(); }; });
+      document.querySelectorAll('[data-rf]').forEach(function (b) { b.onclick = function () { a.fotos.splice(+b.dataset.rf, 1); desenhar(); }; });
+      $('aadd').onclick = function () { a.itens.push({ nome: '', qtd: '' }); desenhar(); var l = document.querySelectorAll('[data-an]'); if (l.length) l[l.length - 1].focus(); };
+      $('afi').onchange = function () {
+        var f = this.files[0]; this.value = ''; if (!f) return;
+        if (a.fotos.length >= 6) { toast('No máximo 6 fotos.'); return; }
+        $('afl').textContent = 'Enviando foto…'; $('afl').style.pointerEvents = 'none'; S.erro = ''; mostrarErro();
+        comprimir(f, IS_GAS || REMOTO ? 1600 : 600).then(function (d) { return api('fotoAluguel', { id: e.id, foto: d }); })
+          .then(function (r) { a.fotos.push(r.url); desenhar(); })
+          .catch(function (er) { S.erro = er.message; mostrarErro(); $('afl').textContent = '📷 Foto da folha'; $('afl').style.pointerEvents = ''; });
+      };
+    }
+    desenhar();
+    bar('<button class="btn primary" id="ok">Salvar material alugado</button>');
+    $('ok').onclick = function () {
+      fazer(this, api('salvarAluguel', { id: e.id, aluguel: a }), function () { toast('Material alugado salvo'); voltar(); });
     };
   };
 
