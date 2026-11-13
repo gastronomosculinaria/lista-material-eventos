@@ -255,6 +255,9 @@ var CORE = (function () {
     var k = function (x) { return String(x.apelido || curto(x.nome)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
     return l.slice().sort(function (a, b) { var x = k(a), y = k(b); return x < y ? -1 : x > y ? 1 : 0; });
   }
+  // O que a pessoa faz no evento. Texto do cadastro só com setores ("Salão/Cozinha/Frete") não é função.
+  var SETORES = ['Salão', 'Cozinha', 'Lavagem', 'Frete', 'Barman'];
+  function soSetor(f) { return /^\s*((Salão|Cozinha|Lavagem|Frete|Barman)\s*\/?\s*)+$/i.test(String(f || '')); }
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
   function nomeEscala(x) { return x.nome_escala || curto(x.nome); }
   // Liga os nomes usados no Montador ao cadastro: primeiro nome igual e todas as palavras contidas no nome completo.
@@ -330,7 +333,7 @@ var CORE = (function () {
     var prest = ordemNome(json(ev.prestadores, [])), em = agora(), sem = semanaEscala(ev.data);
     var linhas = prest.map(function (x, i) {
       return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
-        funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
+        funcao: (soSetor(x.funcao) ? '' : x.funcao) || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
     });
     db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
     if (!linhas.length) return;
@@ -421,6 +424,7 @@ var CORE = (function () {
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
+          carga: s || (conv && conv.coord) ? e.carga || '' : '', descarga: s || (conv && conv.coord) ? e.descarga || '' : '',
           prestadores: ordemNome(json(e.prestadores, [])).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
@@ -830,7 +834,7 @@ var CORE = (function () {
       if (!nome) falha('Dê um nome ao evento.');
       var podeEquipe = s.escala && (!antigo || antigo.escala_status !== 'enviada' || s.papel === 'master');
       var prest = (e.prestadores || []).map(function (x) {
-        var o = { id: texto(x.id, 40), nome: texto(x.nome, 120), telefone: texto(x.telefone, 30), secao: texto(x.secao, 30), funcao: texto(x.funcao, 60) };
+        var o = { id: texto(x.id, 40), nome: texto(x.nome, 120), telefone: texto(x.telefone, 30), secao: SETORES.indexOf(x.secao) >= 0 ? x.secao : 'Salão', funcao: soSetor(x.funcao) ? '' : texto(x.funcao, 60) };
         if (x.coord) o.coord = true; return o;
       }).filter(function (x) { return x.nome; });
       if (!podeEquipe) prest = antigo ? json(antigo.prestadores, []) : [];
@@ -915,6 +919,17 @@ var CORE = (function () {
       log(db, quem, 'Fechou a lista e liberou a saída', ev.nome + ' — separado por ' + texto(p.who && p.who.nome, 80) + ', conferido por ' + conf);
       sincEscalas(db, ev, texto(p.who && p.who.nome, 80));
       sincAgenda(db, ev.id, quem);
+      return true;
+    },
+
+    // Quem fez a carga e a descarga (gente da equipe ou de fora): Master, coordenação ou o coordenador do evento.
+    salvarCarga: function (db, p, s, quem, conv) {
+      var ev = porId(db.all('eventos'), p.id);
+      if (!ev) falha('Evento não encontrado.');
+      if (!(s && (s.papel === 'master' || s.escala)) && !(conv && conv.coord && conv.evento_id === ev.id)) falha('Só o Master ou o coordenador do evento informa a carga e a descarga.');
+      var c = texto(p.carga, 300), d = texto(p.descarga, 300);
+      db.update('eventos', ev.id, { carga: c, descarga: d });
+      log(db, quem, 'Informou carga e descarga', ev.nome + ' — carga: ' + (c || '(vazio)') + '; descarga: ' + (d || '(vazio)'));
       return true;
     },
 
@@ -1123,7 +1138,7 @@ var CORE = (function () {
     itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave',
-      'escala_status', 'escala_por', 'escala_em'],
+      'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
