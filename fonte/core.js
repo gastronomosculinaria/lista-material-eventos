@@ -241,7 +241,7 @@ var CORE = (function () {
   // Dados pessoais (RG, CPF, Pix) não vão no carregar: só pela ficha, para a coordenação.
   function resumoEquipe(x) {
     return { id: x.id, nome: x.nome, telefone: x.telefone || '', funcao: x.funcao || '', bloqueado: x.bloqueado === 'sim', motivo: x.bloqueado === 'sim' ? x.motivo_bloqueio || '' : '',
-      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x) };
+      novo: x.origem === 'link' && x.revisado !== 'sim', completo: !!(x.rg && x.cpf && x.pix), escala: nomeEscala(x), atualizado: x.link_em ? String(x.link_em).slice(0, 10) : '' };
   }
   // Nome como é chamado no Montador de Escala ("Ana Souza"); sem cadastro, primeiro + último nome.
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
@@ -296,6 +296,34 @@ var CORE = (function () {
     });
     if (novos.length) { if (db.insertMany) db.insertMany('equipe', novos); else novos.forEach(function (n) { db.insert('equipe', n); }); }
     return r;
+  }
+  // Leva nome e telefone novos para a equipe dos eventos que ainda não terminaram e para a aba de pagamentos.
+  function espalharCadastro(db, id, d) {
+    var c = porId(db.all('equipe'), id) || d;
+    db.all('eventos').forEach(function (ev) {
+      if (ev.status === 'concluido') return;
+      var l = json(ev.prestadores, []), mudou = false;
+      l.forEach(function (x) {
+        if (x.id !== id) return;
+        if (x.nome !== d.nome) { x.nome = d.nome; mudou = true; }
+        if (d.telefone && x.telefone !== d.telefone) { x.telefone = d.telefone; mudou = true; }
+        var ap = nomeEscala(c); if (x.apelido !== ap) { x.apelido = ap; mudou = true; }
+      });
+      if (!mudou) return;
+      db.update('eventos', ev.id, { prestadores: JSON.stringify(l) });
+      if (ev.status !== 'montando' || ev.escala_status === 'enviada') sincEscalas(db, { id: ev.id, nome: ev.nome, data: ev.data, prestadores: JSON.stringify(l) }, ev.escala_por || '');
+    });
+  }
+  // Aba "escalas" da planilha: uma linha por pessoa do evento; o Montador de Escala lê daqui para montar os pagamentos da semana.
+  function sincEscalas(db, ev, por) {
+    var prest = json(ev.prestadores, []), em = agora(), sem = semanaEscala(ev.data);
+    var linhas = prest.map(function (x, i) {
+      return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
+        funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
+    });
+    db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
+    if (!linhas.length) return;
+    if (db.insertMany) db.insertMany('escalas', linhas); else linhas.forEach(function (r) { db.insert('escalas', r); });
   }
   function equipeAtiva(db) { return db.all('equipe').filter(function (x) { return x.ativo !== 'nao'; }); }
   function acharNaEquipe(db, nome) {
@@ -491,7 +519,7 @@ var CORE = (function () {
       log(db, quem, 'Consultou cadastro completo', x.nome);
       return { id: x.id, nome: x.nome, nome_escala: x.nome_escala || '', escala: nomeEscala(x), telefone: x.telefone || '', funcao: x.funcao || '', rg: x.rg || '', cpf: x.cpf || '', pix: x.pix || '',
         bloqueado: x.bloqueado === 'sim', motivo: x.motivo_bloqueio || '', bloqueado_por: x.bloqueado_por || '', origem: x.origem || '', novo: x.origem === 'link' && x.revisado !== 'sim',
-        criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '' };
+        criado_em: x.criado_em || '', atualizado_em: x.atualizado_em || '', link_em: x.link_em || '', pix_anterior: x.pix_anterior || '' };
     },
 
     bloquearEquipe: function (db, p, s, quem) {
@@ -533,13 +561,16 @@ var CORE = (function () {
       var quemC = { nome: nome + ' [cadastro pelo link]', telefone: d.telefone };
       var ja = porCpf(db, d.cpf);
       if (ja && ja.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
-      if (ja && ja.ativo === 'nao') {
-        d.ativo = 'sim'; d.origem = ja.origem || 'link'; d.revisado = ''; d.atualizado_em = agora();
+      if (ja) {
+        // Mesmo CPF: vale sempre a última atualização feita pela própria pessoa (troca de Pix, telefone...).
+        var volta = ja.ativo === 'nao';
+        d.ativo = 'sim'; d.atualizado_em = agora(); d.link_em = d.atualizado_em;
+        if (ja.pix && digitos(ja.pix) + ja.pix.toLowerCase().replace(/\s/g, '') !== digitos(d.pix) + d.pix.toLowerCase().replace(/\s/g, '')) d.pix_anterior = ja.pix;
         db.update('equipe', ja.id, d);
-        log(db, quemC, 'Voltou ao cadastro pelo link (tinha sido tirado)', nome);
-        return true;
+        espalharCadastro(db, ja.id, d);
+        log(db, quemC, volta ? 'Voltou ao cadastro pelo link (tinha sido tirado)' : 'Atualizou o próprio cadastro pelo link', nome + (d.pix_anterior ? ' (trocou o Pix)' : ''));
+        return { atualizado: true };
       }
-      if (ja) falha('Esse CPF já tem cadastro. Para alterar seus dados, fale com a coordenação.');
       var mesmo = acharNaEquipe(db, nome);
       if (mesmo && mesmo.bloqueado === 'sim') { log(db, quemC, 'Cadastro pelo link recusado (pessoa bloqueada)', nome); falha('Não foi possível concluir o cadastro. Fale com a coordenação.'); }
       d.ativo = 'sim'; d.origem = 'link'; d.revisado = ''; d.atualizado_em = agora();
@@ -749,6 +780,7 @@ var CORE = (function () {
         if (!porId(db.all('eventos'), e.id)) falha('Evento não encontrado.');
         db.update('eventos', e.id, dados);
         log(db, quem, 'Editou evento', nome + ' — prestadores: ' + prest.map(function (x) { return x.nome + ' ' + x.telefone; }).join(', '));
+        if (antigo.status !== 'montando' || antigo.escala_status === 'enviada') sincEscalas(db, { id: e.id, nome: nome, data: dados.data, prestadores: dados.prestadores }, antigo.escala_por || texto(p.who && p.who.nome, 80));
         sincAgenda(db, e.id, quem);
         return { id: e.id };
       }
@@ -812,6 +844,7 @@ var CORE = (function () {
       confere(db, ev, minhas, db.all('itens'));
       db.update('eventos', ev.id, { status: 'em_evento', separado_por: texto(p.who && p.who.nome, 80), conferido_saida: conf });
       log(db, quem, 'Fechou a lista e liberou a saída', ev.nome + ' — separado por ' + texto(p.who && p.who.nome, 80) + ', conferido por ' + conf);
+      sincEscalas(db, ev, texto(p.who && p.who.nome, 80));
       sincAgenda(db, ev.id, quem);
       return true;
     },
@@ -881,13 +914,7 @@ var CORE = (function () {
       if (ev.escala_status === 'enviada') falha('A escala deste evento já foi enviada.');
       var em = agora(), por = texto(p.who && p.who.nome, 80), sem = semanaEscala(ev.data);
       db.update('eventos', ev.id, { escala_status: 'enviada', escala_por: por, escala_em: em });
-      // Aba "escalas" da planilha: uma linha por pessoa; o Montador de Escala lê daqui.
-      var linhas = prest.map(function (x, i) {
-        return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
-          funcao: x.funcao || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
-      });
-      db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
-      if (db.insertMany) db.insertMany('escalas', linhas); else linhas.forEach(function (r) { db.insert('escalas', r); });
+      sincEscalas(db, ev, por);
       log(db, quem, 'Confirmou e enviou a escala', ev.nome + ' (' + ev.data + '): ' + prest.map(function (x) { return x.nome + (x.secao ? ' / ' + x.secao : '') + (x.funcao ? ' / ' + x.funcao : ''); }).join(', '));
       return true;
     },
@@ -1033,7 +1060,7 @@ var CORE = (function () {
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
-    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala'],
+    equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala', 'link_em', 'pix_anterior'],
     escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']

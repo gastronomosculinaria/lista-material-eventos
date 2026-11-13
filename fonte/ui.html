@@ -1,4 +1,4 @@
-<title>Gastrônomos: Material de Eventos</title>
+<title>Gastrônomos: Equipe e Material de Eventos</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Open+Sans:wght@400;500;600;700&display=swap">
@@ -51,8 +51,9 @@ p.sub { color: var(--muted); margin: 4px 0 14px }
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); background: var(--terra); color: var(--hero-ink); border-radius: 22px; overflow: hidden; min-height: 200px; margin-bottom: 16px }
 .hero .lado { padding: 18px 14px 16px 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-width: 0 }
 .hero .logo { height: 112px; width: auto; max-width: 100%; object-fit: contain; object-position: left; align-self: flex-start }
-.hero .tit { font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.25; text-wrap: balance; color: #fff }
-.hero .lema { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin-top: 4px }
+.hero .tit { font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1.25; text-wrap: balance; color: #fff }
+.hero .app { font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1.25; color: #fff }
+.hero .lema { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin-bottom: 6px }
 .hero .foto { margin: 12px 12px 12px 0; background: var(--oliva) center / cover no-repeat; border-radius: 58% 42% 52% 48% / 44% 54% 46% 56% }
 h1, h2, h3, .tile b, .zona .zh b { font-weight: 700; letter-spacing: -.005em }
 .tile .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--wine) }
@@ -320,6 +321,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Cadastro"><h2>' + (novo ? 'Cadastrar pessoa' : esc(x.nome)) + '</h2>' +
         (x.bloqueado ? '<div class="err" style="margin-bottom:10px"><b>Bloqueado(a)</b>: ' + esc(x.motivo) + (x.bloqueado_por ? '<br><small>' + esc(x.bloqueado_por) + '</small>' : '') + '</div>' : '') +
         (x.novo ? '<div class="panel" style="margin-bottom:10px">Cadastro feito pela própria pessoa pelo link. Confira e toque em <b>Salvar</b>.</div>' : '') +
+        (x.link_em ? '<p class="hint" style="font-size:12px;color:var(--terra);margin:0 0 10px">Cadastro atualizado pela própria pessoa em ' + dataBR(String(x.link_em).slice(0, 10)) + (x.pix_anterior ? '. Pix anterior: ' + esc(x.pix_anterior) : '') + '</p>' : '') +
         campo('cn1', 'Nome completo', x.nome) + campo('ce1', 'Nome na escala (como no Montador)', x.nome_escala || '', 'text', ' placeholder="' + esc(curto(x.nome) || 'Ex.: Ana Souza') + '"') + campo('ct1', 'Telefone com DDD', x.telefone, 'tel') +
         campo('cf1', 'Função', x.funcao, 'text', ' list="funcoes"') + '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' +
         campo('cr1', 'RG', x.rg) + campo('cc1', 'CPF', x.cpf, 'text', ' inputmode="numeric"') + campo('cp1', 'Chave Pix', x.pix) +
@@ -367,11 +369,15 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function bar(html) { $('bar').innerHTML = html ? '<div class="bar"><div class="in">' + html + '</div></div>' : ''; }
   var MARCA = { nome: 'Gastrônomos Culinária', lema: 'Arte na Gastronomia', logo: '__MARCA__/logo-amarelo.png',
     fotos: { ident: '__MARCA__/foto-canape.jpg', inicio: '__MARCA__/foto-bebidas.jpg' } };
+  var APP_NOME = 'Equipe e Material de Eventos';
   function hero(titulo, foto) {
     return '<div class="hero"><div class="lado"><img class="logo" src="' + MARCA.logo + '" alt="' + esc(MARCA.nome) + '">' +
-      '<div><div class="tit">' + esc(titulo) + '</div><div class="lema">' + esc(MARCA.lema) + '</div></div></div>' +
+      '<div>' + (titulo === APP_NOME ? '' : '<div class="tit" style="margin-bottom:6px">' + esc(titulo) + '</div>') + '<div class="lema">' + esc(MARCA.lema) + '</div><div class="' + (titulo === APP_NOME ? 'tit' : 'app') + '">' + APP_NOME + '</div></div></div>' +
       '<div class="foto" role="img" aria-label="Foto de um evento da Gastrônomos" style="background-image:url(' + foto + ')"></div></div>';
   }
+  // "cadastro atualizado": a própria pessoa refez o cadastro pelo link (ex.: trocou o Pix).
+  function atualTxt(x) { return x && x.atualizado ? '<div class="hint" style="font-size:11px;color:var(--terra)">cadastro atualizado em ' + dataBR(x.atualizado) + '</div>' : ''; }
+  function doCadastro(id) { return (S.data.equipe || []).filter(function (x) { return x.id === id; })[0]; }
   function demoAviso() { return IS_GAS || REMOTO ? '' : '<div class="demo">Versão de demonstração: os dados ficam só neste aparelho. Senha master de teste: <b>' + CORE.SENHA_MASTER_INICIAL + '</b></div>'; }
 
   // ---------- telas ----------
@@ -379,9 +385,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   function sairDeTudo() { S.who = null; S.token = null; S.data = null; ls('who', null); ls('token', null); ls('dados', null); ls('convE', null); }
   V.ident = function () {
-    header('Material de Eventos');
+    header('Gastrônomos');
     bar('');
-    $('app').innerHTML = demoAviso() + hero('Material de Eventos', MARCA.fotos.ident) +
+    $('app').innerHTML = demoAviso() + hero(APP_NOME, MARCA.fotos.ident) +
       '<h2>Área da equipe</h2><p class="sub">Master e estoquistas. Coordenadores e equipe do evento entram pelo <b>link do evento</b> enviado no grupo do WhatsApp.</p>' +
       '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
@@ -401,9 +407,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   };
 
   V.convite = function () {
-    header('Material de Eventos');
+    header('Gastrônomos');
     bar('');
-    $('app').innerHTML = demoAviso() + hero('Material de Eventos', MARCA.fotos.ident) +
+    $('app').innerHTML = demoAviso() + hero(APP_NOME, MARCA.fotos.ident) +
       '<h2>Equipe do evento</h2><p class="sub">Confirme seu nome e sobrenome como estão na lista do evento.</p>' +
       '<form id="f"><label class="f" for="nm">Nome e sobrenome</label><input type="text" id="nm" autocomplete="name" placeholder="Ex.: Ana Souza" required>' +
       '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
@@ -425,7 +431,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   V.inicio = function () {
     var s = sess(), d = S.data;
-    header('Material de Eventos');
+    header('Gastrônomos');
     bar('');
     var ativos = d.eventos.filter(function (e) { return e.status !== 'concluido'; });
     var h = demoAviso() + hero('Olá, ' + S.who.nome.split(' ')[0], MARCA.fotos.inicio);
@@ -451,7 +457,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 24 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 25 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1023,7 +1029,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     function linhas() {
       $('pn').textContent = prest.length;
       $('pl').innerHTML = prest.length ? '<div class="list">' + prest.map(function (p, k) {
-        return '<div class="li static" style="padding:10px 12px;flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 55%"><div class="nm">' + esc(p.apelido || curto(p.nome)) + '</div><div class="hint">' + esc(p.nome) + '</div></div>' +
+        return '<div class="li static" style="padding:10px 12px;flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 55%"><div class="nm">' + esc(p.apelido || curto(p.nome)) + '</div><div class="hint">' + esc(p.nome) + '</div>' + atualTxt(doCadastro(p.id)) + '</div>' +
           '<button type="button" class="btn" data-px="' + k + '" style="color:var(--bad)">Retirar</button>' +
           '<div class="row" style="flex:1 1 100%;gap:6px;align-items:center"><select data-ps="' + k + '" aria-label="Setor">' + ['Salão', 'Cozinha', 'Frete'].map(function (x) { return '<option' + (x === p.secao ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
           '<input type="text" data-pf="' + k + '" value="' + esc(p.funcao) + '" placeholder="Função" aria-label="Função">' +
@@ -1043,7 +1049,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return ws.every(function (w) { return pal.some(function (q) { return q.indexOf(w) === 0; }); });
       }).sort(function (a, b) { var w0 = ws[0], pa = sem(a.escala).indexOf(w0) === 0 ? 0 : 1, pb = sem(b.escala).indexOf(w0) === 0 ? 0 : 1; return pa - pb || a.escala.localeCompare(b.escala, 'pt'); }).slice(0, 12);
       $('pr').innerHTML = l.length ? l.map(function (x) {
-        var hint = '<div class="hint">' + esc([x.nome, x.funcao].filter(Boolean).join(' · ')) + '</div>';
+        var hint = '<div class="hint">' + esc([x.nome, x.funcao].filter(Boolean).join(' · ')) + '</div>' + atualTxt(x);
         if (x.bloqueado) return '<div class="li static"><div class="mid"><div class="nm">' + esc(x.escala) + '</div><div class="hint" style="color:var(--bad)">Bloqueado: ' + esc(x.motivo) + '</div></div></div>';
         if (ja[x.id]) return '<div class="li static"><div class="mid"><div class="nm">' + esc(x.escala) + '</div>' + hint + '</div><button type="button" class="btn" data-rt="' + x.id + '" style="color:var(--bad)">Retirar</button></div>';
         return '<button type="button" class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(x.escala) + '</div>' + hint + '</div><span class="btn primary">+ Incluir</span></button>';
@@ -1126,7 +1132,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).map(function (g) {
           return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (p) {
             return '<div class="li static" style="padding:8px 12px"><div class="mid"><button type="button" class="nm linkbtn" data-nc="' + esc(p.nome) + '" data-ap="' + esc(apelido(p)) + '" aria-label="Ver nome completo">' + esc(apelido(p)) + '</button>' + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') +
-              ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>' +
+              ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + (s && s.escala ? atualTxt(doCadastro(p.id)) : '') + '</div>' +
               (s && s.escala && p.id ? '<button type="button" class="btn" data-fc="' + esc(p.id) + '">Cadastro</button>' : '') + '</div>';
           }).join('') + '</div>';
         }).join('') + '<div class="row" style="margin-top:16px"><button class="btn" id="m-fc">Fechar</button></div></div></div>';
@@ -1503,7 +1509,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return ws.every(function (w) { return n.indexOf(w) >= 0; });
       }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt'); });
       $('lst').innerHTML = m.length ? m.slice(0, 200).map(function (x) {
-        return '<button class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(apelido(x)) + '</div><div class="hint">' + esc([x.nome, x.funcao, x.telefone].filter(Boolean).join(' · ')) + (x.completo ? '' : ' · <span style="color:var(--bad)">cadastro incompleto</span>') + '</div></div>' +
+        return '<button class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(apelido(x)) + '</div><div class="hint">' + esc([x.nome, x.funcao, x.telefone].filter(Boolean).join(' · ')) + (x.completo ? '' : ' · <span style="color:var(--bad)">cadastro incompleto</span>') + '</div>' + atualTxt(x) + '</div>' +
           (x.bloqueado ? '<span class="pill falta">Bloqueado</span>' : x.novo ? '<span class="pill montando">Novo</span>' : '') + '</button>';
       }).join('') : '<div class="empty">' + (l.length ? 'Ninguém aqui.' : 'Ninguém cadastrado ainda. Mande o link de cadastro.') + '</div>';
       document.querySelectorAll('[data-pe]').forEach(function (b) { b.onclick = function () { fichaCompleta(b.dataset.pe); }; });
@@ -1532,7 +1538,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     header('Cadastro da equipe');
     bar('');
     if (S.p.feito) {
-      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">Cadastro enviado ✔</h2><p>Obrigado, ' + esc(S.p.feito) + '. A coordenação vai conferir seus dados.</p></div>';
+      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">' + (S.p.atual ? 'Cadastro atualizado ✔' : 'Cadastro enviado ✔') + '</h2><p>Obrigado, ' + esc(S.p.feito) + '. ' + (S.p.atual ? 'Seus dados novos já valem para os próximos pagamentos.' : 'A coordenação vai conferir seus dados.') + '</p></div>';
       return;
     }
     function campo(i, rot, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" required' + (extra || '') + '>'; }
@@ -1541,13 +1547,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<form id="f">' + campo('cn', 'Nome completo', 'text', ' autocomplete="name"') + campo('cr', 'RG') + campo('cc', 'CPF', 'text', ' inputmode="numeric" placeholder="000.000.000-00"') +
       campo('ct', 'Telefone com DDD', 'tel', ' autocomplete="tel" placeholder="(11) 99999-9999"') + campo('cf', 'Função', 'text', ' list="funcoes" placeholder="Ex.: Garçom"') +
       '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' + campo('cp', 'Chave Pix') +
-      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b></p>' +
+      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b><br><span class="hint">Já tem cadastro e mudou o Pix ou o telefone? Preencha de novo: vale sempre o último envio.</span></p>' +
       '<div id="erro" class="err" hidden></div><div style="height:8px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
     $('f').onsubmit = function (e) {
       e.preventDefault();
       var btn = $('ok'), nome = $('cn').value.trim(); btn.disabled = true; S.erro = ''; mostrarErro();
       api('cadastroNovo', { token: null, chave: CAD, pessoa: { nome: nome, rg: $('cr').value, cpf: $('cc').value, telefone: $('ct').value, funcao: $('cf').value, pix: $('cp').value } })
-        .then(function () { S.p = { feito: nome.split(/\s+/)[0] }; window.scrollTo(0, 0); V.cadastro(); })
+        .then(function (r) { S.p = { feito: nome.split(/\s+/)[0], atual: !!(r && r.atualizado) }; window.scrollTo(0, 0); V.cadastro(); })
         .catch(function (err) { S.erro = err.message; btn.disabled = false; mostrarErro(); });
     };
   };

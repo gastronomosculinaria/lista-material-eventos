@@ -3,7 +3,7 @@
 function doGet(e) {
   if (e && e.parameter && e.parameter.acao) return apiRemoto_(e.parameter);
   var out = HtmlService.createHtmlOutput(APP_HTML)
-    .setTitle('Gastrônomos: Material de Eventos')
+    .setTitle('Gastrônomos: Equipe e Material de Eventos')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   try { out.setFaviconUrl('https://raw.githubusercontent.com/gastronomosculinaria/lista-material-eventos/main/marca/icone-64.png'); } catch (e) {}
