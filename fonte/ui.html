@@ -487,7 +487,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.3 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1058,6 +1058,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<h2>Na equipe (<span id="pn">' + prest.length + '</span>)</h2><div id="pl"></div><div id="erro" class="err" hidden></div>';
     function mudou() { S.p.mudou = true; $('ok').textContent = 'Salvar equipe (' + prest.length + ')'; $('ok').disabled = false; }
     function linhas() {
+      prest.sort(function (a, b) { return sem(a.apelido || curto(a.nome)).localeCompare(sem(b.apelido || curto(b.nome))); });
       $('pn').textContent = prest.length;
       $('pl').innerHTML = prest.length ? '<div class="list">' + prest.map(function (p, k) {
         return '<div class="li static" style="padding:10px 12px;flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 55%"><div class="nm">' + esc(p.apelido || curto(p.nome)) + '</div><div class="hint">' + esc(p.nome) + '</div>' + atualTxt(doCadastro(p.id)) + '</div>' +
@@ -1207,7 +1208,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if ($('veq')) $('veq').onclick = function (x) {
       x.preventDefault();
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Equipe do evento"><h2>Equipe · ' + e.prestadores.length + ' pessoas</h2>' +
-        agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).map(function (g) {
+        agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).sort(function (a, b) { var o = ['Salão', 'Cozinha', 'Frete'], x = o.indexOf(a[0]), y = o.indexOf(b[0]); return (x < 0 ? 9 : x) - (y < 0 ? 9 : y); }).map(function (g) {
           return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (p) {
             return '<div class="li static" style="padding:8px 12px"><div class="mid"><button type="button" class="nm linkbtn" data-nc="' + esc(p.nome) + '" data-ap="' + esc(apelido(p)) + '" aria-label="Ver nome completo">' + esc(apelido(p)) + '</button>' + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') +
               ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + (s && s.escala ? atualTxt(doCadastro(p.id)) : '') + '</div>' +
