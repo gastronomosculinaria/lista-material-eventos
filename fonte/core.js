@@ -150,6 +150,12 @@ var CORE = (function () {
     return r;
   }
   function nomeItem(it) { return it ? it.nome + (it.numero ? ' nº ' + it.numero : '') : ''; }
+  // Lista de material do evento em ordem alfabética pelo nome do item (nº 2 antes de nº 10).
+  function cmpTexto(x, y) {
+    try { return String(x).localeCompare(String(y), 'pt', { numeric: true, sensitivity: 'base' }); }
+    catch (e) { x = String(x).toLowerCase(); y = String(y).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }
+  }
+  function ordemItens(l) { return l.slice().sort(function (a, b) { return cmpTexto(a.item_nome, b.item_nome); }); }
   function confere(db, ev, linhas, itens) {
     var comp = comprometido(db, ev);
     linhas.forEach(function (l) {
@@ -360,7 +366,7 @@ var CORE = (function () {
     var ev = porId(db.all('eventos'), evId);
     if (!ev) return;
     try {
-      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
+      var linhas = ordemItens(db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }));
       var prest = json(ev.prestadores, []);
       var t = 'Status: ' + (STATUS_TXT[ev.status] || ev.status) + '\n' +
         (prest.length ? 'Prestadores: ' + prest.map(function (x) { return x.nome + ' ' + x.telefone; }).join(', ') + '\n' : '') +
@@ -427,7 +433,7 @@ var CORE = (function () {
           carga: s || (conv && conv.coord) ? e.carga || '' : '', descarga: s || (conv && conv.coord) ? e.descarga || '' : '',
           prestadores: ordemNome(json(e.prestadores, [])).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
-          linhas: linhas.filter(function (l) { return l.evento_id === e.id; }).map(function (l) {
+          linhas: ordemItens(linhas.filter(function (l) { return l.evento_id === e.id; })).map(function (l) {
             return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida),
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
               justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '' };
