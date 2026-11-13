@@ -464,7 +464,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.1 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1031,6 +1031,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('bk').onclick = function () { if (!S.p.mudou || confirm('Sair sem salvar a equipe?')) voltar(); };
     $('app').innerHTML = '<div class="panel" style="margin-bottom:12px"><b>' + esc(e.nome) + '</b><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div>' +
       '<label class="f" for="pq" style="margin-top:0">Incluir pessoa</label><div class="search"><input type="search" id="pq" placeholder="Digite o primeiro nome…" autocomplete="off" aria-label="Digite o primeiro nome"></div><div id="pr" class="list" style="margin-top:6px"></div>' +
+      '<p class="hint" style="margin:8px 0 0"><a href="#" id="clg">Colar lista do grupo do WhatsApp</a></p>' +
       '<h2>Na equipe (<span id="pn">' + prest.length + '</span>)</h2><div id="pl"></div><div id="erro" class="err" hidden></div>';
     function mudou() { S.p.mudou = true; $('ok').textContent = 'Salvar equipe (' + prest.length + ')'; $('ok').disabled = false; }
     function linhas() {
@@ -1073,6 +1074,53 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar('<button class="btn primary block" id="ok"' + (S.p.mudou ? '' : ' disabled') + '>' + (S.p.mudou ? 'Salvar equipe (' + prest.length + ')' : 'Equipe salva') + '</button>');
     linhas();
     $('pq').oninput = achar;
+    function incluir(x) { prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: (/^(Salão|Cozinha|Frete)/.exec(x.funcao || '') || ['Salão'])[0], funcao: /^(Salão|Cozinha|Frete)$/.test(x.funcao || '') ? '' : x.funcao || '' }); }
+    // Lista copiada do grupo: nomes ou telefones separados por vírgula ou linha. Só marca quem achar com certeza no cadastro.
+    function lerGrupo(txt) {
+      var ja = {}, r = { inc: [], ja: [], bloq: [], duv: [], nao: [] };
+      prest.forEach(function (p) { ja[p.id || sem(p.nome)] = 1; });
+      String(txt || '').split(/[\n,;]+/).forEach(function (t) {
+        t = t.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/^\s*~\s*/, '').trim();
+        if (!t || /^(voce|you)$/.test(sem(t))) return;
+        var dig = t.replace(/\D/g, ''), c;
+        if (dig.length >= 8 && !/[a-zA-Z\u00c0-\u00ff]{2}/.test(t)) {
+          var fim = dig.slice(-8);
+          c = eq.filter(function (x) { return String(x.telefone || '').replace(/\D/g, '').slice(-8) === fim; });
+        } else {
+          var st = sem(t).replace(/[^a-z0-9 ]/g, ' ').trim(), ws = st.split(/\s+/).filter(Boolean);
+          if (!ws.length) return;
+          c = eq.filter(function (x) { return sem(x.escala) === st || sem(x.nome) === st; });
+          if (!c.length && ws.length > 1) c = eq.filter(function (x) {
+            var pal = sem(x.escala + ' ' + x.nome).split(/\s+/);
+            return pal[0] === ws[0] && ws.every(function (w) { return pal.indexOf(w) >= 0; });
+          });
+        }
+        if (!c.length) { r.nao.push(t); return; }
+        if (c.length > 1) { r.duv.push(t + ' (' + c.length + ' no cadastro)'); return; }
+        var x = c[0];
+        if (x.bloqueado) { r.bloq.push(x.escala); return; }
+        if (ja[x.id]) { r.ja.push(x.escala); return; }
+        ja[x.id] = 1; incluir(x); r.inc.push(x.escala);
+      });
+      return r;
+    }
+    $('clg').onclick = function (ev) {
+      ev.preventDefault();
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Colar lista do grupo"><h2>Colar lista do grupo</h2>' +
+        '<p class="hint">No WhatsApp, abra o grupo, copie os nomes ou telefones dos participantes e cole aqui (separados por vírgula ou um por linha). O app marca quem ele achar no cadastro e mostra quem ficou de fora.</p>' +
+        '<textarea id="lgt" rows="7" style="width:100%" placeholder="Ana Souza, Bruno Lima, +55 21 99999-0000" aria-label="Lista do grupo"></textarea><div id="lgr"></div>' +
+        '<div class="row" style="margin-top:14px"><button class="btn primary" id="lgok">Marcar na equipe</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
+      $('m-fc').onclick = fecharModal;
+      $('lgok').onclick = function () {
+        var r = lerGrupo($('lgt').value);
+        function bloco(tit, l, cor) { return l.length ? '<p class="hint" style="margin:8px 0 0' + (cor ? ';color:var(--bad)' : '') + '"><b>' + tit + ' (' + l.length + '):</b> ' + esc(l.join(', ')) + '</p>' : ''; }
+        $('lgr').innerHTML = '<div class="panel" style="margin-top:10px"><b>' + r.inc.length + (r.inc.length === 1 ? ' pessoa marcada' : ' pessoas marcadas') + '</b>' +
+          bloco('Marcados agora', r.inc) + bloco('Já estavam na equipe', r.ja) + bloco('Não achei no cadastro', r.nao, 1) + bloco('Mais de uma pessoa com esse nome, marque pela busca', r.duv, 1) + bloco('Bloqueados, não marcados', r.bloq, 1) +
+          (r.inc.length ? '<p class="hint" style="margin:8px 0 0">Confira a lista e toque em <b>Salvar equipe</b>.</p>' : '') + '</div>';
+        $('lgt').value = '';
+        if (r.inc.length) { mudou(); linhas(); achar(); }
+      };
+    };
     $('ok').onclick = function () {
       fazer(this, api('salvarEvento', { evento: { id: e.id, nome: e.nome, data: e.data, hora_inicio: e.hora_inicio, hora_fim: e.hora_fim, local: e.local, obs: e.obs, prestadores: prest } }),
         function () { toast('Equipe salva'); S.p.mudou = false; voltar(); });
