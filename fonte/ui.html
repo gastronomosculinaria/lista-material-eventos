@@ -313,6 +313,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   }
   function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord); }
   // "Ana Paula de Souza Lima" -> "Ana Lima"
+  var SETORES = ['Salão', 'Cozinha', 'Lavagem', 'Frete', 'Barman'];
+  function setorDe(f) { var m = /^\s*(Salão|Cozinha|Lavagem|Frete|Barman)/i.exec(String(f || '')); return m ? SETORES.filter(function (x) { return x.toLowerCase() === m[1].toLowerCase(); })[0] : 'Salão'; }
+  function funcaoDe(f) { return /^\s*((Salão|Cozinha|Lavagem|Frete|Barman)\s*\/?\s*)+$/i.test(String(f || '')) ? '' : f || ''; }
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
   function apelido(p) { return p.apelido || p.escala || curto(p.nome); }
   function papelTxt(s) { return s.papel === 'master' ? 'Master' : s.estoque ? 'Estoquista' : 'Coordenação'; }
@@ -469,7 +472,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.4 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.7 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -975,7 +978,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       return prest.length ? '<div class="list">' + prest.map(function (p, k) {
         return '<div class="li static" style="padding:8px 10px;flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 60%"><div class="nm">' + esc(p.nome) + '</div></div>' +
           '<button type="button" class="chip" data-px="' + k + '" aria-label="Tirar ' + esc(p.nome) + '">×</button>' +
-          '<div class="row" style="flex:1 1 100%;gap:6px;align-items:center"><select data-ps="' + k + '" aria-label="Setor">' + ['Salão', 'Cozinha', 'Frete'].map(function (x) { return '<option' + (x === p.secao ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
+          '<div class="row" style="flex:1 1 100%;gap:6px;align-items:center"><select data-ps="' + k + '" aria-label="Setor">' + SETORES.map(function (x) { return '<option' + (x === p.secao ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
           '<input type="text" data-pf="' + k + '" value="' + esc(p.funcao) + '" placeholder="Função (ex.: carga)" aria-label="Função">' +
           '<button type="button" class="chip' + (p.coord ? ' on' : '') + '" data-pc="' + k + '" aria-pressed="' + !!p.coord + '">Coordenador</button></div></div>';
       }).join('') + '</div>' : '<p class="hint">Ninguém marcado ainda.</p>';
@@ -1010,7 +1013,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return '<button type="button" class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(x.nome) + '</div>' + (x.funcao ? '<div class="hint">' + esc(x.funcao) + '</div>' : '') + '</div><span class="btn">Marcar</span></button>';
       }).join('') + (!l.length ? '<p class="hint">Ninguém com esse nome no cadastro. Pessoa nova: cadastre em <b>Equipe de eventos</b> ou mande o link de cadastro para ela.</p>' : '');
       document.querySelectorAll('[data-pe]').forEach(function (b) {
-        b.onclick = function () { var x = (S.data.equipe || []).filter(function (y) { return y.id === b.dataset.pe; })[0]; prest.push({ id: x.id, nome: x.nome, telefone: x.telefone, secao: (/^(Salão|Cozinha|Frete)/.exec(x.funcao || '') || ['Salão'])[0], funcao: '' }); $('pq').value = ''; achar(); ligar(); };
+        b.onclick = function () { var x = (S.data.equipe || []).filter(function (y) { return y.id === b.dataset.pe; })[0]; prest.push({ id: x.id, nome: x.nome, telefone: x.telefone, secao: setorDe(x.funcao), funcao: '' }); $('pq').value = ''; achar(); ligar(); };
       });
     }
     ligar();
@@ -1030,7 +1033,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!e) { inicio(); return; }
     var eq = S.data.equipe || [];
     function doCad(id) { return eq.filter(function (x) { return x.id === id; })[0]; }
-    var prest = S.p.prest || e.prestadores.map(function (p) { var c = doCad(p.id); return { id: p.id || '', nome: p.nome, apelido: c ? c.escala : apelido(p), telefone: p.telefone || '', coord: !!p.coord, secao: p.secao || 'Salão', funcao: p.funcao || '' }; });
+    var prest = S.p.prest || e.prestadores.map(function (p) { var c = doCad(p.id); return { id: p.id || '', nome: p.nome, apelido: c ? c.escala : apelido(p), telefone: p.telefone || '', coord: !!p.coord, secao: p.secao || 'Salão', funcao: funcaoDe(p.funcao) }; });
     S.p.prest = prest;
     header('Escalar equipe', true);
     $('bk').onclick = function () { if (!S.p.mudou || confirm('Sair sem salvar a equipe?')) voltar(); };
@@ -1045,7 +1048,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('pl').innerHTML = prest.length ? '<div class="list">' + prest.map(function (p, k) {
         return '<div class="li static" style="padding:10px 12px;flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 55%"><div class="nm">' + esc(p.apelido || curto(p.nome)) + '</div><div class="hint">' + esc(p.nome) + '</div>' + atualTxt(doCadastro(p.id)) + '</div>' +
           '<button type="button" class="btn" data-px="' + k + '" style="color:var(--bad)">Retirar</button>' +
-          '<div class="row" style="flex:1 1 100%;gap:6px;align-items:center"><select data-ps="' + k + '" aria-label="Setor">' + ['Salão', 'Cozinha', 'Frete'].map(function (x) { return '<option' + (x === p.secao ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
+          '<div class="row" style="flex:1 1 100%;gap:6px;align-items:center"><select data-ps="' + k + '" aria-label="Setor">' + SETORES.map(function (x) { return '<option' + (x === p.secao ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
           '<input type="text" data-pf="' + k + '" value="' + esc(p.funcao) + '" placeholder="Função" aria-label="Função">' +
           '<button type="button" class="chip' + (p.coord ? ' on' : '') + '" data-pc="' + k + '" aria-pressed="' + !!p.coord + '">Coordenador</button></div></div>';
       }).join('') + '</div>' : '<div class="empty">Ninguém na equipe ainda. Digite o primeiro nome acima.</div>';
@@ -1063,7 +1066,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return ws.every(function (w) { return pal.some(function (q) { return q.indexOf(w) === 0; }); });
       }).sort(function (a, b) { var w0 = ws[0], pa = sem(a.escala).indexOf(w0) === 0 ? 0 : 1, pb = sem(b.escala).indexOf(w0) === 0 ? 0 : 1; return pa - pb || a.escala.localeCompare(b.escala, 'pt'); }).slice(0, 12);
       $('pr').innerHTML = l.length ? l.map(function (x) {
-        var hint = '<div class="hint">' + esc([x.nome, x.funcao].filter(Boolean).join(' · ')) + '</div>' + atualTxt(x);
+        var hint = '<div class="hint">' + esc(x.nome) + '</div>' + atualTxt(x);
         if (x.bloqueado) return '<div class="li static"><div class="mid"><div class="nm">' + esc(x.escala) + '</div><div class="hint" style="color:var(--bad)">Bloqueado: ' + esc(x.motivo) + '</div></div></div>';
         if (ja[x.id]) return '<div class="li static"><div class="mid"><div class="nm">' + esc(x.escala) + '</div>' + hint + '</div><button type="button" class="btn" data-rt="' + x.id + '" style="color:var(--bad)">Retirar</button></div>';
         return '<button type="button" class="li" data-pe="' + x.id + '"><div class="mid"><div class="nm">' + esc(x.escala) + '</div>' + hint + '</div><span class="btn primary">+ Incluir</span></button>';
@@ -1071,7 +1074,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       document.querySelectorAll('[data-pe]').forEach(function (b) {
         b.onclick = function () {
           var x = doCad(b.dataset.pe);
-          prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: (/^(Salão|Cozinha|Frete)/.exec(x.funcao || '') || ['Salão'])[0], funcao: /^(Salão|Cozinha|Frete)$/.test(x.funcao || '') ? '' : x.funcao || '' });
+          prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: setorDe(x.funcao), funcao: funcaoDe(x.funcao) });
           $('pq').value = ''; mudou(); linhas(); achar(); toast(x.escala + ' incluído(a)'); $('pq').focus();
         };
       });
@@ -1080,7 +1083,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar('<button class="btn primary block" id="ok"' + (S.p.mudou ? '' : ' disabled') + '>' + (S.p.mudou ? 'Salvar equipe (' + prest.length + ')' : 'Equipe salva') + '</button>');
     linhas();
     $('pq').oninput = achar;
-    function incluir(x) { prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: (/^(Salão|Cozinha|Frete)/.exec(x.funcao || '') || ['Salão'])[0], funcao: /^(Salão|Cozinha|Frete)$/.test(x.funcao || '') ? '' : x.funcao || '' }); }
+    function incluir(x) { prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: setorDe(x.funcao), funcao: funcaoDe(x.funcao) }); }
     // Lista copiada do grupo: nomes ou telefones separados por vírgula ou linha. Só marca quem achar com certeza no cadastro.
     function lerGrupo(txt) {
       var ja = {}, r = { inc: [], ja: [], bloq: [], duv: [], nao: [] };
@@ -1145,11 +1148,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var f = l.qtd_saida - l.qtd_retorno, it = item(l.item_id); perdas.pecas += f;
       if (it && it.custo) perdas.valor += f * it.custo; else perdas.semCusto++;
     });
+    var podeCarga = s ? s.papel === 'master' || s.escala : souPrestador(e) && S.data.convite.coord;
     var podeEsc = s && s.escala && (e.escala_status !== 'enviada' || s.papel === 'master');
     var h = (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span><span class="hint">' + pecas + ' peças</span></div>' +
       '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
       (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
       '<dt>Equipe</dt><dd>' + (e.prestadores.length ? '<a href="#" id="veq">Ver equipe (' + e.prestadores.length + ')</a>' : 'ninguém marcado') + '</dd>' +
+      (podeCarga ? '<dt>Carga e descarga</dt><dd>' + (e.carga || e.descarga ? '<b>Carga:</b> ' + esc(e.carga || 'não informado') + '<br><b>Descarga:</b> ' + esc(e.descarga || 'não informado') + '<br>' : '') + '<a href="#" id="cgd">' + (e.carga || e.descarga ? 'Alterar' : 'Informar quem fez') + '</a></dd>' : '') +
       (s && s.escala ? '<dt>Escala</dt><dd>' + (e.escala_status === 'enviada' ? 'Enviada por ' + esc(e.escala_por) + '<br><span class="hint">' + quando(e.escala_em) + '</span>'
         : 'Confirmar até terça ' + dataBR(e.prazo_escala) + (e.prazo_escala && e.prazo_escala < hoje() ? ' <b style="color:var(--bad)">(atrasada)</b>' : '')) + '</dd>' : '') +
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
@@ -1187,13 +1192,32 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
     if ($('escalar')) $('escalar').onclick = function () { ir('escalar', { id: e.id }); };
+    if ($('cgd')) $('cgd').onclick = function (x) {
+      x.preventDefault();
+      var nomes = e.prestadores.map(function (p) { return apelido(p); });
+      function cx(i, rot, v) { return '<label class="f" for="' + i + '">' + rot + '</label><textarea id="' + i + '" rows="2" style="width:100%" placeholder="Nomes de quem fez, da equipe ou de fora">' + esc(v) + '</textarea>' +
+        (nomes.length ? '<div class="chips" style="margin-top:6px">' + nomes.map(function (n) { return '<button type="button" class="chip" data-cg="' + i + '" data-n="' + esc(n) + '">+ ' + esc(n) + '</button>'; }).join('') + '</div>' : ''); }
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Carga e descarga"><h2>Carga e descarga</h2>' +
+        '<p class="hint">Escreva quem fez. Pode ser gente da equipe (toque no nome) ou de fora (digite o nome).</p>' +
+        cx('cga', 'Quem fez a carga', e.carga) + cx('cgb', 'Quem fez a descarga', e.descarga) +
+        '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px"><button class="btn primary" id="cgok">Salvar</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
+      $('m-fc').onclick = fecharModal;
+      document.querySelectorAll('[data-cg]').forEach(function (b) {
+        b.onclick = function () {
+          var t = $(b.dataset.cg), l = t.value.split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+          if (l.indexOf(b.dataset.n) < 0) l.push(b.dataset.n);
+          t.value = l.join(', ');
+        };
+      });
+      $('cgok').onclick = function () { fazer(this, api('salvarCarga', { id: e.id, carga: $('cga').value, descarga: $('cgb').value }), function () { fecharModal(); toast('Carga e descarga salvas'); render(); }); };
+    };
     if ($('veq')) $('veq').onclick = function (x) {
       x.preventDefault();
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Equipe do evento"><h2>Equipe · ' + e.prestadores.length + ' pessoas</h2>' +
-        agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).sort(function (a, b) { var o = ['Salão', 'Cozinha', 'Frete'], x = o.indexOf(a[0]), y = o.indexOf(b[0]); return (x < 0 ? 9 : x) - (y < 0 ? 9 : y); }).map(function (g) {
+        agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).sort(function (a, b) { var o = SETORES, x = o.indexOf(a[0]), y = o.indexOf(b[0]); return (x < 0 ? 9 : x) - (y < 0 ? 9 : y); }).map(function (g) {
           return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].map(function (p) {
             return '<div class="li static" style="padding:8px 12px"><div class="mid"><button type="button" class="nm linkbtn" data-nc="' + esc(p.nome) + '" data-ap="' + esc(apelido(p)) + '" aria-label="Ver nome completo">' + esc(apelido(p)) + '</button>' + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') +
-              ((p.funcao || (s && p.telefone)) ? '<div class="hint">' + esc([p.funcao, s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + (s && s.escala ? atualTxt(doCadastro(p.id)) : '') + '</div>' +
+              ((funcaoDe(p.funcao) || (s && p.telefone)) ? '<div class="hint">' + esc([funcaoDe(p.funcao), s ? p.telefone : ''].filter(Boolean).join(' · ')) + '</div>' : '') + (s && s.escala ? atualTxt(doCadastro(p.id)) : '') + '</div>' +
               (s && s.escala && p.id ? '<button type="button" class="btn" data-fc="' + esc(p.id) + '">Cadastro</button>' : '') + '</div>';
           }).join('') + '</div>';
         }).join('') + '<div class="row" style="margin-top:16px"><button class="btn" id="m-fc">Fechar</button></div></div></div>';
