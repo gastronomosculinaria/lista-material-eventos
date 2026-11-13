@@ -201,7 +201,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   var LINK = (/[?#&]e=([a-z0-9]+\.[a-z0-9]+)/.exec(location.search + location.hash) || [])[1] || '';
   // link de cadastro de pessoa nova: ?cadastro=<chave>
   var CAD = (/[?#&]cadastro=([a-z0-9]+)/.exec(location.search + location.hash) || [])[1] || '';
-  var LEIT = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1 };
+  var LEIT = { carregar: 1, listarAgenda: 1, infoAgenda: 1, historico: 1, linksCadastro: 1, verCadastro: 1 };
   function novoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
   function erroRede(m) { var e = new Error(m || 'Sem conexão. Confira a internet e tente de novo.'); e.rede = true; return e; }
   function avisoRede(on) { S.offline = on; var r = document.getElementById('rede'); if (r) r.hidden = !on; }
@@ -339,7 +339,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         campo('cf1', 'Função', x.funcao, 'text', ' list="funcoes"') + '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' +
         campo('cr1', 'RG', x.rg) + campo('cc1', 'CPF', x.cpf, 'text', ' inputmode="numeric"') + campo('cp1', 'Chave Pix', x.pix) +
         '<div id="mb"></div><div id="erro" class="err" hidden></div><div class="row" style="margin-top:18px;flex-wrap:wrap"><button class="btn primary" id="cok">Salvar</button>' +
-        (novo || x.fora ? '' : (x.bloqueado ? '<button class="btn" id="cdb">Desbloquear</button>' : '<button class="btn danger" id="cbl">Bloquear</button>') + '<button class="btn" id="crm">Tirar do cadastro</button>') +
+        (novo || x.bloqueado ? '' : '<button class="btn" id="clk">Link para atualizar</button>') + (novo || x.fora ? '' : (x.bloqueado ? '<button class="btn" id="cdb">Desbloquear</button>' : '<button class="btn danger" id="cbl">Bloquear</button>') + '<button class="btn" id="crm">Tirar do cadastro</button>') +
         '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
       $('m-fc').onclick = fecharModal;
       function fim(msg) { return function () { fecharModal(); toast(msg); if (depois) depois(); else render(); }; }
@@ -349,6 +349,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('cok').onclick = function () { salvar(this, true); };
       if ($('apv')) $('apv').onclick = function () { fazer(this, api('aprovarCadastro', { id: x.id, aprovar: true }), fim('Atualização aprovada')); };
       if ($('rcs')) $('rcs').onclick = function () { fazer(this, api('aprovarCadastro', { id: x.id, aprovar: false }), fim('Atualização recusada')); };
+      if ($('clk')) $('clk').onclick = function () { linkCadastro({ id: x.id, nome: x.nome }); };
       if ($('crm')) $('crm').onclick = function () { salvar(this, false); };
       if ($('cdb')) $('cdb').onclick = function () { fazer(this, api('bloquearEquipe', { id: x.id, bloquear: false }), fim('Desbloqueado')); };
       if ($('cbl')) $('cbl').onclick = function () {
@@ -359,17 +360,39 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       };
     }).catch(function (e) { fecharModal(); toast(e.message); });
   }
-  function linkCadastro(nova) {
-    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><div class="loading">Gerando link…</div></div></div>';
-    api('linkCadastro', { nova: !!nova }).then(function (r) {
-      var u = PAGES + '?cadastro=' + r.chave, t = 'Cadastro para trabalhar nos eventos da Gastrônomos: preencha seus dados neste link.\n' + u;
-      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link de cadastro"><h2>Link de cadastro</h2><p class="sub">Mande para a pessoa nova. Ela preenche nome completo, RG, CPF, telefone, função e chave Pix, e o cadastro aparece aqui para você conferir.</p>' +
+  // Links de cadastro de uso único: cada link serve para um cadastro e para de funcionar depois do envio.
+  // pessoa = { id, nome } para atualizar o cadastro de alguém; sem pessoa, link para uma pessoa nova.
+  function linkCadastro(pessoa) {
+    function mostrar(r) {
+      var u = PAGES + '?cadastro=' + r.chave;
+      var t = r.atualizar ? 'Link para atualizar seu cadastro nos eventos da Gastrônomos. Vale para um envio só.\n' + u : 'Cadastro para trabalhar nos eventos da Gastrônomos: preencha seus dados neste link. Vale para um envio só.\n' + u;
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link de cadastro"><h2>' + (r.atualizar ? 'Link para atualizar cadastro' : 'Link de cadastro') + '</h2>' +
+        '<p class="sub">' + (r.para ? 'Para <b>' + esc(r.para) + '</b>. ' : '') + 'Vale para <b>um cadastro só</b> e para de funcionar depois do envio. ' +
+        (r.atualizar ? 'Só funciona com o CPF desta pessoa. Os dados novos valem depois que você aprovar na ficha.' : 'O cadastro aparece aqui para você conferir.') + '</p>' +
         '<textarea id="ltx" readonly style="min-height:110px">' + esc(t) + '</textarea><div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" id="lcp">Copiar</button>' +
-        '<a class="btn" href="https://wa.me/?text=' + encodeURIComponent(t) + '" target="_blank" rel="noopener">WhatsApp</a><button class="btn" id="m-fc">Fechar</button></div>' +
-        '<p class="hint" style="margin-top:16px">Link foi parar onde não devia? <a href="#" id="lnv">Gerar link novo</a> (o atual para de funcionar).</p></div></div>';
+        '<a class="btn" href="https://wa.me/?text=' + encodeURIComponent(t) + '" target="_blank" rel="noopener">WhatsApp</a><button class="btn" id="m-fc">Fechar</button></div></div></div>';
       $('m-fc').onclick = fecharModal;
       $('lcp').onclick = function () { var a = $('ltx'); a.select(); try { navigator.clipboard.writeText(t); } catch (e) { document.execCommand('copy'); } toast('Link copiado'); };
-      $('lnv').onclick = function (e) { e.preventDefault(); linkCadastro(true); };
+    }
+    function gerar(btn, dados) {
+      if (btn) btn.disabled = true;
+      api('linkCadastro', dados).then(mostrar).catch(function (e) { if (btn) { btn.disabled = false; S.erro = e.message; mostrarErro(); } else { fecharModal(); toast(e.message); } });
+    }
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet"><div class="loading">' + (pessoa ? 'Gerando link…' : 'Abrindo…') + '</div></div></div>';
+    if (pessoa) { gerar(null, { equipe_id: pessoa.id }); return; }
+    api('linksCadastro', {}).then(function (ls) {
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Link de cadastro"><h2>Link de cadastro</h2>' +
+        '<p class="sub">Cada link vale para <b>um cadastro só</b> e para de funcionar depois do envio. Para quem já tem cadastro, abra a ficha da pessoa e toque em <b>Link para atualizar</b>.</p>' +
+        '<label class="f" for="lpn" style="margin-top:0">Para quem é (nome)</label><input type="text" id="lpn" placeholder="Ex.: Maria Souza">' +
+        '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:12px"><button class="btn primary" id="lgr">Gerar link</button><button class="btn" id="m-fc">Fechar</button></div>' +
+        (ls.length ? '<h2 style="margin-top:22px">Links ainda não usados</h2><div class="list">' + ls.map(function (c) {
+          return '<div class="li"><div class="mid"><div class="nm">' + esc(c.para || 'Sem nome') + '</div><div class="hint">' + (c.atualizar ? 'Atualizar cadastro' : 'Pessoa nova') + ' · ' + esc(c.criado_por) + ' em ' + dataBR(String(c.criado_em).slice(0, 10)) + '</div></div>' +
+            '<button class="btn" data-lnk="' + esc(c.chave) + '">Cancelar</button></div>'; }).join('') + '</div>' : '') + '</div></div>';
+      $('m-fc').onclick = fecharModal;
+      $('lgr').onclick = function () { gerar(this, { para: $('lpn').value }); };
+      document.querySelectorAll('[data-lnk]').forEach(function (b) {
+        b.onclick = function () { b.disabled = true; api('cancelarLink', { chave: b.dataset.lnk }).then(function () { toast('Link cancelado'); linkCadastro(null); }).catch(function (e) { b.disabled = false; toast(e.message); }); };
+      });
     }).catch(function (e) { fecharModal(); toast(e.message); });
   }
   function sem(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
@@ -473,7 +496,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.8 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1631,7 +1654,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     document.querySelectorAll('[data-fl]').forEach(function (b) { b.onclick = function () { S.p.novos = 0; S.p.fil = b.dataset.fl; V.equipe(); }; });
     $('q').oninput = des; des();
     $('novo').onclick = function () { fichaCompleta(null); };
-    $('lcd').onclick = function () { linkCadastro(false); };
+    $('lcd').onclick = function () { linkCadastro(null); };
     $('apl').onclick = function (ev) {
       ev.preventDefault();
       $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Nomes do Montador"><h2>Nomes do Montador</h2><p class="sub">Cole os nomes como estão no Montador de Escala, um por linha. Cada um é ligado à pessoa do cadastro com o mesmo primeiro nome e sobrenome. Quem já tem nome na escala não muda.</p>' +
@@ -1651,23 +1674,30 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.cadastro = function () {
     header('Cadastro da equipe');
     bar('');
+    if (!S.p.link) {
+      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="loading">Abrindo o link…</div>';
+      api('verCadastro', { token: null, chave: CAD }).then(function (r) { S.p.link = r; V.cadastro(); })
+        .catch(function (e) { $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">Link sem validade</h2><p>' + esc(e.message) + '</p></div>'; });
+      return;
+    }
+    var LK = S.p.link;
     if (S.p.feito) {
-      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">' + (S.p.atual ? 'Atualização enviada ✔' : 'Cadastro enviado ✔') + '</h2><p>Obrigado, ' + esc(S.p.feito) + '. ' + (S.p.atual ? 'Seus dados novos passam a valer depois que a coordenação aprovar.' : 'A coordenação vai conferir seus dados.') + '</p></div>';
+      $('app').innerHTML = hero('Cadastro da equipe', MARCA.fotos.ident) + '<div class="panel" style="margin-top:16px"><h2 style="margin-top:0">' + (S.p.atual ? 'Atualização enviada ✔' : 'Cadastro enviado ✔') + '</h2><p>Obrigado, ' + esc(S.p.feito) + '. ' + (S.p.atual ? 'Seus dados novos passam a valer depois que a coordenação aprovar.' : 'A coordenação vai conferir seus dados.') + ' Este link já foi usado. Para mudar algo depois, peça um link novo à Shirlei, à Fabiana ou ao Master.</p></div>';
       return;
     }
     function campo(i, rot, tipo, extra) { return '<label class="f" for="' + i + '">' + rot + '</label><input type="' + (tipo || 'text') + '" id="' + i + '" required' + (extra || '') + '>'; }
     $('app').innerHTML = demoAviso() + hero('Cadastro da equipe', MARCA.fotos.ident) +
-      '<h2>Seus dados</h2><p class="sub">Para trabalhar nos eventos da Gastrônomos. Os dados ficam só com a coordenação, para a escala e o pagamento.</p>' +
+      '<h2>' + (LK.atualizar ? 'Atualize seus dados' + (LK.nome ? ', ' + esc(LK.nome) : '') : 'Seus dados') + '</h2><p class="sub">Para trabalhar nos eventos da Gastrônomos. Os dados ficam só com a coordenação, para a escala e o pagamento.</p>' +
       '<form id="f">' + campo('cn', 'Nome completo', 'text', ' autocomplete="name"') + campo('cr', 'RG') + campo('cc', 'CPF', 'text', ' inputmode="numeric" placeholder="000.000.000-00"') +
       campo('ct', 'Telefone com DDD', 'tel', ' autocomplete="tel" placeholder="(11) 99999-9999"') + campo('cf', 'Função', 'text', ' list="funcoes" placeholder="Ex.: Garçom"') +
       '<datalist id="funcoes">' + FUNCOES.map(function (f) { return '<option value="' + f + '">'; }).join('') + '</datalist>' + campo('cp', 'Chave Pix') +
-      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b><br><span class="hint">Já tem cadastro e mudou o Pix ou o telefone? Preencha de novo: vale o último envio, depois que a coordenação aprovar.</span></p>' +
+      '<p class="panel" style="margin-top:16px"><b>Confira os dados preenchidos antes de enviar.</b><br><span class="hint">Este link vale para um envio só. ' + (LK.atualizar ? 'Preencha todos os campos, mesmo os que não mudaram. Os dados novos valem depois que a coordenação aprovar.' : 'Para corrigir algo depois, peça um link novo à Shirlei, à Fabiana ou ao Master.') + '</span></p>' +
       '<div id="erro" class="err" hidden></div><div style="height:8px"></div><button class="btn primary block" id="ok">Enviar cadastro</button></form>';
     $('f').onsubmit = function (e) {
       e.preventDefault();
       var btn = $('ok'), nome = $('cn').value.trim(); btn.disabled = true; S.erro = ''; mostrarErro();
       api('cadastroNovo', { token: null, chave: CAD, pessoa: { nome: nome, rg: $('cr').value, cpf: $('cc').value, telefone: $('ct').value, funcao: $('cf').value, pix: $('cp').value } })
-        .then(function (r) { S.p = { feito: nome.split(/\s+/)[0], atual: !!(r && r.atualizado) }; window.scrollTo(0, 0); V.cadastro(); })
+        .then(function (r) { S.p = { link: LK, feito: nome.split(/\s+/)[0], atual: !!(r && r.atualizado) }; window.scrollTo(0, 0); V.cadastro(); })
         .catch(function (err) { S.erro = err.message; btn.disabled = false; mostrarErro(); });
     };
   };
