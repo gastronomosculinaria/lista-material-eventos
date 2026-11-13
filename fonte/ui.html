@@ -114,6 +114,10 @@ textarea { min-height: 80px }
 .ret.short { border-color: var(--bad) }
 .ret .top { display: flex; gap: 12px; align-items: center }
 .ret .top .ph { width: 56px; height: 56px; border-radius: 10px; font-size: 18px; flex: none }
+.fts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px }
+.fts a, .fts .ft { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); display: block; flex: none }
+.fts img { width: 100%; height: 100%; object-fit: cover; display: block }
+.fts .ft button { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 22px; padding: 0; cursor: pointer }
 .logi { border-bottom: 1px solid var(--line); padding: 10px 0; font-size: 14px }
 .logi .t { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
 .empty { text-align: center; color: var(--muted); padding: 32px 12px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r) }
@@ -237,6 +241,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function iniciais(n) { return esc(String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase()); }
   function foto(it) { return it && it.foto ? '<img src="' + esc(it.foto) + '" alt="" loading="lazy">' : iniciais(it && it.nome); }
+  function fotosFalta(l) { return l && l.fotos && l.fotos.length ? '<div class="fts">' + l.fotos.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Foto da justificativa" loading="lazy"></a>'; }).join('') + '</div>' : ''; }
   function dataBR(d) { if (!d) return 'sem data'; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; }
   function quando(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); }
   function nomeIt(i) { return i ? i.nome + (i.numero ? ' nº ' + i.numero : '') : ''; }
@@ -1258,7 +1263,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(it)) + '</div>' +
         '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
-          ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' : '') + '</div>' +
+          ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' + fotosFalta(l) : '') + '</div>' +
         (falt ? '<span class="pill falta">−' + (l.qtd_saida - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
     }
     if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
@@ -1458,7 +1463,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.retorno = function () {
     var e = evento(S.p.id);
     header('Retorno: ' + e.nome, true);
-    var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' });
+    var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' }); R.f = R.f || {};
     function consumo(id) { return (S.data.consumo || []).indexOf(grupoDoItem(id)) >= 0; }
     function guardar() { ls(chave, R); }
     var motivos = S.data.motivos || [];
@@ -1471,7 +1476,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" max="' + l.qtd_saida + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
           '<div data-j="' + id + '" hidden><label class="f" style="margin-top:0" for="m-' + id + '">Motivo</label><select id="m-' + id + '" data-mm="' + id + '">' +
           (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>' +
-          '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea></div></div>';
+          '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea>' +
+          '<div class="fts" id="fs-' + id + '"></div><label class="btn" style="margin-top:8px" for="fi-' + id + '" id="fl-' + id + '">📷 Adicionar foto</label><input type="file" accept="image/*" id="fi-' + id + '" data-ff="' + id + '" hidden>' +
+          '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div></div>';
       }, '<div class="list">', '</div>'); }).join('') +
       '<label class="f" for="cfr">Quem conferiu o retorno com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
       '<datalist id="cfl">' + nomesEquipe(e) + '</datalist><div id="erro" class="err" hidden></div>';
@@ -1483,6 +1490,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var b1 = document.querySelector('[data-ev1="' + id + '"]'), b0 = document.querySelector('[data-ev0="' + id + '"]');
       if (b1) { b1.classList.toggle('on', v !== '' && +v >= l.qtd_saida); b0.classList.toggle('on', falta); }
     }
+    function fotos(id) {
+      var l = R.f[id] || [];
+      $('fs-' + id).innerHTML = l.map(function (u, k) { return '<div class="ft"><img src="' + esc(u) + '" alt="Foto"><button type="button" data-fx="' + id + '" data-k="' + k + '" aria-label="Tirar foto">✕</button></div>'; }).join('');
+      $('fl-' + id).style.display = l.length >= 3 ? 'none' : '';
+      $('fs-' + id).querySelectorAll('[data-fx]').forEach(function (b) { b.onclick = function () { R.f[id].splice(+b.dataset.k, 1); guardar(); fotos(id); }; });
+    }
     function setV(id, v) { $('v-' + id).value = v; R.v[id] = v; guardar(); upd(id); }
     // restaura rascunho
     e.linhas.forEach(function (l) {
@@ -1490,13 +1503,23 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (R.v[id] != null && R.v[id] !== '') $('v-' + id).value = R.v[id];
       if (R.m[id]) $('m-' + id).value = R.m[id];
       if (R.j[id]) $('j-' + id).value = R.j[id];
-      upd(id);
+      fotos(id); upd(id);
     });
     document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); }; });
     document.querySelectorAll('[data-ev1]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ev1, 1); }; });
     document.querySelectorAll('[data-ev0]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ev0, 0); }; });
     document.querySelectorAll('[data-mm]').forEach(function (x) { x.onchange = function () { R.m[x.dataset.mm] = x.value; guardar(); }; });
     document.querySelectorAll('[data-jj]').forEach(function (x) { x.oninput = function () { R.j[x.dataset.jj] = x.value; guardar(); }; });
+    document.querySelectorAll('[data-ff]').forEach(function (x) {
+      x.onchange = function () {
+        var id = x.dataset.ff, f = x.files[0], lb = $('fl-' + id); x.value = ''; if (!f) return;
+        lb.textContent = 'Enviando foto…'; lb.style.pointerEvents = 'none'; S.erro = ''; mostrarErro();
+        comprimir(f, IS_GAS || REMOTO ? 1000 : 500).then(function (d) { return api('fotoRetorno', { evento_id: e.id, item_id: id, foto: d }); })
+          .then(function (r) { (R.f[id] = R.f[id] || []).push(r.url); guardar(); })
+          .catch(function (er) { S.erro = er.message; mostrarErro(); })
+          .then(function () { lb.textContent = '📷 Adicionar foto'; lb.style.pointerEvents = ''; fotos(id); });
+      };
+    });
     $('cfr').oninput = function () { R.c = this.value; guardar(); }; ligarSozinho('cfrso', 'cfr');
     $('tudo').onclick = function () { e.linhas.forEach(function (l) { setV(l.item_id, l.qtd_saida); }); };
     $('qr').onclick = function () {
@@ -1517,7 +1540,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var so = $('cfrso').checked, cf = so ? S.who.nome : $('cfr').value.trim();
       S.erro = !cf ? 'Informe quem conferiu o retorno com você ou marque que conferiu sozinho.' : '';
       if (S.erro) { mostrarErro(); return; }
-      var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value }; });
+      var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value, fotos: R.f[id] || [] }; });
       fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf, sozinho: so }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
     };
   };
@@ -1675,7 +1698,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = '<p class="sub">Material que voltou a menos. Confirme a perda para dar baixa no inventário, ou marque como encontrado.</p>' +
       (l.length ? '<div class="list">' + l.map(function (x, k) {
         return '<div class="li static" style="flex-wrap:wrap"><div class="mid" style="flex:1 1 200px"><div class="nm">' + x.falta + ' × ' + esc(x.nome) + '</div><div class="hint">' + esc(x.evento) + ' · ' + dataBR(x.data) + '<br>' +
-          esc([x.motivo, x.justificativa].filter(Boolean).join(' — ')) + (x.custo ? ' · ' + moeda(x.custo) : '') + '</div></div>' +
+          esc([x.motivo, x.justificativa].filter(Boolean).join(' — ')) + (x.custo ? ' · ' + moeda(x.custo) : '') + '</div>' + fotosFalta(x) + '</div>' +
           '<div class="row" style="flex:1 1 100%"><button class="btn" data-pn="' + k + '">Foi encontrado</button><button class="btn danger" data-ps="' + k + '">Confirmar perda</button></div></div>';
       }).join('') + '</div>' : '<div class="empty">Nenhuma perda esperando confirmação.</div>') + '<div id="erro" class="err" hidden></div>';
     function modal(t, corpo, botao, ok) {
@@ -1689,7 +1712,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     document.querySelectorAll('[data-ps]').forEach(function (b) {
       b.onclick = function () {
         var x = l[+b.dataset.ps];
-        modal('Confirmar perda', '<p>' + x.falta + ' × <b>' + esc(x.nome) + '</b> não voltaram de ' + esc(x.evento) + '.</p><p class="hint">Motivo: ' + esc([x.motivo, x.justificativa].filter(Boolean).join(' — ') || 'não informado') + '</p>', 'Sim, foi perda', function () {
+        modal('Confirmar perda', '<p>' + x.falta + ' × <b>' + esc(x.nome) + '</b> não voltaram de ' + esc(x.evento) + '.</p><p class="hint">Motivo: ' + esc([x.motivo, x.justificativa].filter(Boolean).join(' — ') || 'não informado') + '</p>' + fotosFalta(x), 'Sim, foi perda', function () {
           modal('Excluir do inventário?', '<p><b>' + (x.equipamento ? esc(x.nome) + ' será excluído' : x.falta + (x.falta > 1 ? ' unidades' : ' unidade') + ' de ' + esc(x.nome) + (x.falta > 1 ? ' serão excluídas' : ' será excluída')) +
             ' permanentemente do Inventário Geral.</b></p><p class="hint">' + (x.equipamento ? '' : 'Estoque passa de ' + x.estoque + ' para ' + Math.max(0, x.estoque - x.falta) + '. ') + 'Isso não pode ser desfeito.</p>', 'Excluir do inventário', function () {
             fazer(this, api('confirmarPerda', { id: x.id, confirmar: true }), function () { fecharModal(); toast('Perda confirmada e baixa feita'); render(); });
