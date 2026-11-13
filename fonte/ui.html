@@ -501,7 +501,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.1 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.3 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1069,7 +1069,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('bk').onclick = function () { if (!S.p.mudou || confirm('Sair sem salvar a equipe?')) voltar(); };
     $('app').innerHTML = '<div class="panel" style="margin-bottom:12px"><b>' + esc(e.nome) + '</b><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div>' +
       '<label class="f" for="pq" style="margin-top:0">Incluir pessoa</label><div class="search"><input type="search" id="pq" placeholder="Digite o primeiro nome…" autocomplete="off" aria-label="Digite o primeiro nome"></div><div id="pr" class="list" style="margin-top:6px"></div>' +
-      '<p class="hint" style="margin:8px 0 0"><a href="#" id="clg">Colar lista do grupo do WhatsApp</a></p>' +
+      '<div class="row" style="margin-top:10px;gap:8px"><button type="button" class="btn" id="dit">🎤 Ditar nomes</button><button type="button" class="btn" id="clg">Colar lista</button></div>' +
       '<h2>Na equipe (<span id="pn">' + prest.length + '</span>)</h2><div id="pl"></div><div id="erro" class="err" hidden></div>';
     function mudou() { S.p.mudou = true; $('ok').textContent = 'Salvar equipe (' + prest.length + ')'; $('ok').disabled = false; }
     function linhas() {
@@ -1114,13 +1114,23 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     linhas();
     $('pq').oninput = achar;
     function incluir(x) { prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: setorDe(x.funcao), funcao: funcaoDe(x.funcao) }); }
-    // Lista copiada do grupo: nomes ou telefones separados por vírgula ou linha. Só marca quem achar com certeza no cadastro.
-    function lerGrupo(txt) {
+    // Lista colada ou ditada: nomes ou telefones separados por vírgula ou linha. Só marca quem achar com certeza no cadastro;
+    // ditando (fala), também aceita os nomes emendados e o primeiro nome quando só uma pessoa tem esse nome.
+    function lerGrupo(txt, fala) {
       var ja = {}, r = { inc: [], ja: [], bloq: [], duv: [], nao: [] };
       prest.forEach(function (p) { ja[p.id || sem(p.nome)] = 1; });
-      String(txt || '').split(/[\n,;]+/).forEach(function (t) {
-        t = t.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/^\s*~\s*/, '').trim();
-        if (!t || /^(voce|you)$/.test(sem(t))) return;
+      var partes = [];
+      String(txt || '').split(/\n+/).forEach(function (ln) {
+        ln = ln.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+        // Mensagem copiada ou exportada do WhatsApp: "[13/11/2026, 15:20] Ana Souza: eu vou" ou "13/11/2026 15:20 - Ana Souza: eu vou" → fica quem mandou
+        var m = ln.match(/^\s*\[?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?,?\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?\s?m\.?)?\]?\s*-?\s*([^:]{1,60}):/i);
+        if (m) { partes.push(m[1]); return; }
+        ln.split(/[,;]+|\s+[-–—]\s+/).forEach(function (t) { partes.push(t); });
+      });
+      partes.forEach(function (t) {
+        // tira numeração, marcadores e emojis do começo ("1. Ana", "- Ana", "✅ Ana") e o que vem entre parênteses
+        t = t.replace(/^\s*\d{1,3}\s*[.)ºª\-–]\s*(?=\D)/, '').replace(/\([^)]*[a-zA-Z][^)]*\)/g, ' ').replace(/^[\s~*•·\-–—☀-➿️]+/, '').replace(/[\ud83c-\udbff][\udc00-\udfff]/g, ' ').trim();
+        if (!t || /^(voce|you|admin do grupo|admin|group admin|ok)$/.test(sem(t))) return;
         var dig = t.replace(/\D/g, ''), c;
         if (dig.length >= 8 && !/[a-zA-Z\u00c0-\u00ff]{2}/.test(t)) {
           var fim = dig.slice(-8);
@@ -1134,32 +1144,98 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
             return pal[0] === ws[0] && ws.every(function (w) { return pal.indexOf(w) >= 0; });
           });
         }
-        if (!c.length) { r.nao.push(t); return; }
-        if (c.length > 1) { r.duv.push(t + ' (' + c.length + ' no cadastro)'); return; }
-        var x = c[0];
+        if (c.length === 1) { marcar(c[0]); return; }
+        if (c.length > 1) { r.duv.push(t); return; }
+        if (!fala || !/[a-zA-Z\u00c0-\u00ff]/.test(t)) { r.nao.push(t); return; }
+        porPalavras(t);
+      });
+      function marcar(x) {
         if (x.bloqueado) { r.bloq.push(x.escala); return; }
         if (ja[x.id]) { r.ja.push(x.escala); return; }
         ja[x.id] = 1; incluir(x); r.inc.push(x.escala);
-      });
+      }
+      // Nomes ditados ou escritos sem vírgula ("Ana Souza Bruno e Carla"): lê palavra por palavra.
+      // Cada primeiro nome puxa as palavras seguintes que fazem parte do nome da pessoa; só marca se sobrar uma pessoa só.
+      function porPalavras(t) {
+        var ws = sem(t).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean), i = 0;
+        var SOLTAS = { e: 1, virgula: 1, ponto: 1, tambem: 1, mais: 1, o: 1, a: 1, os: 1, as: 1, de: 1, da: 1, do: 1, das: 1, dos: 1, com: 1, so: 1, eu: 1, vai: 1, vao: 1, ta: 1, esta: 1, pra: 1, para: 1, no: 1, na: 1, hoje: 1, amanha: 1, evento: 1, equipe: 1 };
+        var pals = eq.map(function (x) { return { x: x, p: sem(x.escala + ' ' + x.nome).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean), f: [sem(x.escala).split(/\s+/)[0], sem(x.nome).split(/\s+/)[0]] }; });
+        function mai(x) { return x.replace(/(^| )\S/g, function (c) { return c.toUpperCase(); }); }
+        while (i < ws.length) {
+          var w = ws[i];
+          var cs = pals.filter(function (o) { return o.f.indexOf(w) >= 0; });
+          if (!cs.length) { if (!SOLTAS[w]) r.nao.push(mai(w)); i++; continue; }
+          // estende enquanto a próxima palavra for do nome de algum candidato
+          var n = 1;
+          while (i + n < ws.length) {
+            var nx = ws[i + n], ok = cs.filter(function (o) { return o.p.indexOf(nx) >= 0; });
+            if (!ok.length) break;
+            cs = ok; n++;
+          }
+          var dito = ws.slice(i, i + n).join(' ');
+          if (cs.length === 1) marcar(cs[0].x); else r.duv.push(mai(dito));
+          i += n;
+        }
+      }
       return r;
     }
-    $('clg').onclick = function (ev) {
-      ev.preventDefault();
-      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Colar lista do grupo"><h2>Colar lista do grupo</h2>' +
-        '<p class="hint">No WhatsApp, abra o grupo, copie os nomes ou telefones dos participantes e cole aqui (separados por vírgula ou um por linha). O app marca quem ele achar no cadastro e mostra quem ficou de fora.</p>' +
-        '<textarea id="lgt" rows="7" style="width:100%" placeholder="Ana Souza, Bruno Lima, +55 21 99999-0000" aria-label="Lista do grupo"></textarea><div id="lgr"></div>' +
-        '<div class="row" style="margin-top:14px"><button class="btn primary" id="lgok">Marcar na equipe</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
+    function abrirLista(falar) {
+      var Rec = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null;
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Vários nomes"><h2>' + (falar ? 'Ditar nomes' : 'Colar lista') + '</h2>' +
+        '<p class="hint">' + (falar ? 'Toque em <b>Falar</b> e diga os nomes, por exemplo: “Ana Souza, Bruno, Carla Lima”. Se o app não ouvir, toque no campo e use o microfone do teclado.'
+          : 'Cole os nomes, um por linha ou separados por vírgula: uma lista que o grupo preencheu, mensagens copiadas da conversa ou o texto copiado de um print da lista de participantes.') +
+        ' O app marca quem ele achar no cadastro e mostra quem ficou de fora.</p>' +
+        '<textarea id="lgt" rows="5" style="width:100%" placeholder="Ana Souza, Bruno, Carla Lima" aria-label="Nomes"></textarea><div id="lgs" class="hint" hidden></div><div id="lgr"></div>' +
+        '<div class="row" style="margin-top:14px">' + (Rec ? '<button class="btn' + (falar ? ' primary' : '') + '" id="lgf">🎤 Falar</button>' : '') +
+        '<button class="btn' + (falar && Rec ? '' : ' primary') + '" id="lgok">Marcar na equipe</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
       $('m-fc').onclick = fecharModal;
-      $('lgok').onclick = function () {
-        var r = lerGrupo($('lgt').value);
-        function bloco(tit, l, cor) { return l.length ? '<p class="hint" style="margin:8px 0 0' + (cor ? ';color:var(--bad)' : '') + '"><b>' + tit + ' (' + l.length + '):</b> ' + esc(l.join(', ')) + '</p>' : ''; }
+      function marcarTexto() {
+        var tx = $('lgt').value; if (!tx.trim()) return;
+        var r = lerGrupo(tx, falar);
+        function bloco(tit, l, cor, busca) {
+          return l.length ? '<p class="hint" style="margin:8px 0 0' + (cor ? ';color:var(--bad)' : '') + '"><b>' + tit + ' (' + l.length + '):</b> ' +
+            (busca ? l.map(function (n) { return '<a href="#" data-bq="' + esc(n) + '">' + esc(n) + '</a>'; }).join(', ') : esc(l.join(', '))) + '</p>' : '';
+        }
         $('lgr').innerHTML = '<div class="panel" style="margin-top:10px"><b>' + r.inc.length + (r.inc.length === 1 ? ' pessoa marcada' : ' pessoas marcadas') + '</b>' +
-          bloco('Marcados agora', r.inc) + bloco('Já estavam na equipe', r.ja) + bloco('Não achei no cadastro', r.nao, 1) + bloco('Mais de uma pessoa com esse nome, marque pela busca', r.duv, 1) + bloco('Bloqueados, não marcados', r.bloq, 1) +
+          bloco('Marcados agora', r.inc) + bloco('Já estavam na equipe', r.ja) + bloco('Não achei no cadastro', r.nao, 1, 1) + bloco('Mais de uma pessoa com esse nome, toque para escolher', r.duv, 1, 1) + bloco('Bloqueados, não marcados', r.bloq, 1) +
+          (r.nao.length || r.duv.length ? '<p class="hint" style="margin:8px 0 0">Toque num nome em vermelho para procurar na busca.</p>' : '') +
           (r.inc.length ? '<p class="hint" style="margin:8px 0 0">Confira a lista e toque em <b>Salvar equipe</b>.</p>' : '') + '</div>';
         $('lgt').value = '';
         if (r.inc.length) { mudou(); linhas(); achar(); }
-      };
-    };
+        document.querySelectorAll('[data-bq]').forEach(function (a) {
+          a.onclick = function (ev) { ev.preventDefault(); fecharModal(); $('pq').value = a.dataset.bq.split(/\s+/)[0]; achar(); $('pq').focus(); };
+        });
+      }
+      $('lgok').onclick = marcarTexto;
+      if (!Rec) { if (falar) $('lgt').focus(); return; }
+      function parar() { if (rec) { var x = rec; rec = null; try { x.stop(); } catch (z) {} } }
+      function ouvir() {
+        var base = $('lgt').value.trim(), fim = '';
+        rec = new Rec(); rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+        $('lgf').textContent = '■ Parar'; $('lgs').hidden = false; $('lgs').textContent = 'Ouvindo… diga os nomes.';
+        pararCam = parar;
+        rec.onresult = function (ev) {
+          var meio = ''; fim = '';
+          for (var k = 0; k < ev.results.length; k++) { if (ev.results[k].isFinal) fim += ' ' + ev.results[k][0].transcript; else meio += ' ' + ev.results[k][0].transcript; }
+          $('lgt').value = (base ? base + ', ' : '') + (fim + meio).trim();
+        };
+        rec.onerror = function (ev) {
+          $('lgs').textContent = ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'O celular não deixou o app usar o microfone. Toque no campo acima e use o microfone do teclado.'
+            : ev.error === 'no-speech' ? 'Não ouvi nada. Toque em Falar e tente de novo.' : 'O microfone parou (' + ev.error + '). Tente de novo ou use o microfone do teclado.';
+        };
+        rec.onend = function () {
+          var era = !!rec; rec = null; if (pararCam === parar) pararCam = null;
+          if (!$('lgf')) return;
+          $('lgf').textContent = '🎤 Falar';
+          if ($('lgt').value.trim()) { $('lgs').hidden = true; marcarTexto(); }
+        };
+        try { rec.start(); } catch (z) { rec = null; $('lgs').textContent = 'Não consegui ligar o microfone. Use o microfone do teclado.'; }
+      }
+      $('lgf').onclick = function () { if (rec) parar(); else ouvir(); };
+      if (falar) ouvir();
+    }
+    $('dit').onclick = function () { abrirLista(true); };
+    $('clg').onclick = function () { abrirLista(false); };
     $('ok').onclick = function () {
       fazer(this, api('salvarEvento', { evento: { id: e.id, nome: e.nome, data: e.data, hora_inicio: e.hora_inicio, hora_fim: e.hora_fim, local: e.local, obs: e.obs, prestadores: prest, agenda_id: e.id ? '' : c.id } }),
         function () { toast('Equipe salva'); S.p.mudou = false; voltar(); });
