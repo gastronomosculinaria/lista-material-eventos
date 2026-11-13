@@ -291,7 +291,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   }
   function sess() { return S.data && S.data.sessao; }
   function item(id) { return (S.data.itens || []).filter(function (i) { return i.id === id; })[0]; }
-  function evento(id) { return (S.data.eventos || []).filter(function (e) { return e.id === id; })[0]; }
+  // A lista de material do evento aparece sempre em ordem alfabética dentro de cada grupo e subtítulo.
+  function evento(id) {
+    var e = (S.data.eventos || []).filter(function (e) { return e.id === id; })[0];
+    if (e && e.linhas) e.linhas.sort(function (a, b) { return cmpNome(itemDaLinha(a), itemDaLinha(b)); });
+    return e;
+  }
   function digitos(s) { return String(s || '').replace(/\D/g, ''); }
   function souPrestador(ev) { var c = S.data.convite; return !!(c && c.evento_id === ev.id); }
   function hoje() { var d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
@@ -467,7 +472,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.5 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.7 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
