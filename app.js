@@ -482,7 +482,7 @@ var CORE = (function () {
           lista_estoque: e.lista_estoque === 'sim', chegada_por: e.chegada_por || '', chegada_em: e.chegada_em || '', chegada_status: e.chegada_status || '', chegada_obs: e.chegada_obs || '', chegada_revisao: e.chegada_revisao || '',
           aluguel: aluguelDe(e),
           linhas: ordemItens(linhas.filter(function (l) { return l.evento_id === e.id; })).map(function (l) {
-            return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida), qtd_extra: num(l.qtd_extra),
+            return { id: l.id, item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida), qtd_extra: num(l.qtd_extra),
               qtd_chegada: l.qtd_chegada === '' || l.qtd_chegada == null ? null : num(l.qtd_chegada), extra_por: l.extra_por || '',
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
               justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []) };
@@ -1170,6 +1170,27 @@ var CORE = (function () {
       var c = texto(p.carga, 300), d = texto(p.descarga, 300);
       db.update('eventos', ev.id, { carga: c, descarga: d });
       log(db, quem, 'Informou carga e descarga', ev.nome + ' — carga: ' + (c || '(vazio)') + '; descarga: ' + (d || '(vazio)'));
+      return true;
+    },
+
+    // Master corrige a quantidade que saiu depois do retorno (ex.: separaram 2, tiraram 1 antes de sair e a lista não foi ajustada).
+    corrigirSaida: function (db, p, s, quem) {
+      pedeCoord(s);
+      var l = porId(db.all('evento_itens'), p.id);
+      if (!l) falha('Item não encontrado na lista do evento.');
+      var ev = porId(db.all('eventos'), l.evento_id);
+      if (!ev || ev.status !== 'concluido') falha('Só dá para corrigir depois que o retorno foi registrado. Antes disso, reabra a lista.');
+      if (l.perda === 'confirmada') falha('A perda deste item já foi confirmada e saiu do inventário. Não dá mais para corrigir por aqui.');
+      var nova = Number(String(p.qtd_saida).replace(',', '.')), antes = num(l.qtd_saida), extra = num(l.qtd_extra), voltou = num(l.qtd_retorno), porque = texto(p.motivo, 200);
+      if (!isFinite(nova) || nova < 0 || nova !== Math.floor(nova)) falha('Informe a quantidade que saiu de verdade.');
+      if (nova + extra < voltou) falha('Voltaram ' + voltou + '. A quantidade que saiu' + (extra ? ' (mais ' + extra + ' de extra)' : '') + ' não pode ser menor que a que voltou.');
+      if (nova === antes) falha('A quantidade que saiu já é ' + antes + '.');
+      if (!porque) falha('Escreva em poucas palavras por que está corrigindo.');
+      var dados = { qtd_saida: String(nova) };
+      if (nova + extra === voltou) { dados.justificativa = ''; dados.motivo = ''; dados.perda = ''; dados.perda_por = ''; dados.fotos = ''; }
+      db.update('evento_itens', l.id, dados);
+      log(db, quem, 'Corrigiu a quantidade que saiu depois do retorno', ev.nome + ': ' + l.item_nome + ' — saiu ' + antes + ' corrigido para ' + nova + (extra ? ' (+' + extra + ' extra)' : '') + ' (voltou ' + voltou + '). ' + porque +
+        (l.justificativa || l.motivo ? ' | Anotação anterior: ' + [l.motivo, l.justificativa].filter(Boolean).join(' — ') + (l.perda ? ' [' + l.perda + (l.perda_por ? ', ' + l.perda_por : '') + ']' : '') : ''));
       return true;
     },
 
