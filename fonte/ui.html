@@ -319,7 +319,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // Outros dias do mesmo evento (lista repetida): mesma série, em ordem de data.
   function diasDaSerie(ev) {
     if (!ev || !ev.serie) return [];
-    return (S.data.eventos || []).filter(function (y) { return y.serie === ev.serie && y.id !== ev.id && !y.outro; })
+    return (S.data.eventos || []).filter(function (y) { return y.serie === ev.serie && y.id !== ev.id; })
       .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
   }
   function ficouNoLocal(ev) { return ev.status === 'concluido' && /^Ficou no local/.test(ev.retorno_por || ''); }
@@ -1215,7 +1215,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (!mais.length && !menos.length && para.linhas.length ? '<p class="hint">As listas dos dois dias são iguais.</p>' : '') +
       '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px"><button class="btn primary" id="psok"' + (para.linhas.length ? '' : ' disabled') + '>Confirmar</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
     $('m-fc').onclick = fecharModal;
-    $('psok').onclick = function () { fazer(this, api('passarMaterial', { id: de.id, para: para.id }), function () { fecharModal(); toast('Material passou para ' + dataBR(para.data).slice(0, 5)); ir('evento', { id: para.id }); }); };
+    $('psok').onclick = function () { fazer(this, api('passarMaterial', { id: de.id, para: para.id }), function () { fecharModal(); toast('Material passou para ' + dataBR(para.data).slice(0, 5)); if (para.outro) render(); else ir('evento', { id: para.id }); }); };
   }
 
   V.evento = function () {
@@ -1236,7 +1236,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     // Material que fica no local: passa deste dia para o próximo, ou vem do dia anterior.
     var proxDia = e.status === 'em_evento' ? serieEv.filter(function (y) { return y.status === 'montando' && y.data >= e.data; })[0] : null;
     var diaAnt = e.status === 'montando' ? serieEv.filter(function (y) { return y.status === 'em_evento' && y.data <= e.data; }).pop() : null;
-    var podePassar = podeLista(e) || (souPrestador(e) && S.data.convite.coord);
+    var podePassar = podeLista(e) || souPrestador(e);
     var h = (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + statusTxt(e) + '</span><span class="hint">' + pecas + ' peças</span></div>' +
       '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
       (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
@@ -1245,7 +1245,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (s && s.escala ? '<dt>Escala</dt><dd>' + (e.escala_status === 'enviada' ? 'Enviada por ' + esc(e.escala_por) + '<br><span class="hint">' + quando(e.escala_em) + '</span>'
         : 'Confirmar até terça ' + dataBR(e.prazo_escala) + (e.prazo_escala && e.prazo_escala < hoje() ? ' <b style="color:var(--bad)">(atrasada)</b>' : '')) + '</dd>' : '') +
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
-      (serieEv.length ? '<dt>Outros dias</dt><dd>' + serieEv.map(function (y) { return '<a href="#" data-dia="' + y.id + '">' + dataBR(y.data) + '</a> <span class="hint">' + esc(statusTxt(y)) + '</span>'; }).join('<br>') +
+      (serieEv.length ? '<dt>Outros dias</dt><dd>' + serieEv.map(function (y) { return (y.outro ? '<b>' + dataBR(y.data) + '</b>' : '<a href="#" data-dia="' + y.id + '">' + dataBR(y.data) + '</a>') + ' <span class="hint">' + esc(statusTxt(y)) + '</span>'; }).join('<br>') +
         '<br><span class="hint">Mesmo material. A lista de cada dia pode ser alterada separadamente.</span></dd>' : '') +
       (e.separado_por ? '<dt>Saída</dt><dd>' + (/^Continuou no local/.test(e.conferido_saida) ? esc(e.conferido_saida) + '<br><span class="hint">Passado adiante por ' + esc(e.separado_por) + '</span>' : 'Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span>') + '</dd>' : '') +
       (e.status === 'concluido' ? '<dt>Retorno</dt><dd>' + esc(e.retorno_por) + (e.conferido_retorno ? '<br><span class="hint">Conferido por ' + esc(e.conferido_retorno) + '</span>' : '') + '<br><span class="hint">' + quando(e.concluido_em) + '</span></dd>' : '') +
@@ -1277,7 +1277,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
-    if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? (diaAnt ? '<button class="btn primary" id="psa">Material já está no local</button>' : '<button class="btn primary" id="cs">Fechar lista</button>') : ''));
+    if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e) && e.linhas.length) bar('<button class="btn primary" id="psa">Receber o material de ' + dataBR(diaAnt.data).slice(0, 5) + '</button>');
+    else if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? (diaAnt ? '<button class="btn primary" id="psa">Material já está no local</button>' : '<button class="btn primary" id="cs">Fechar lista</button>') : ''));
     else if (podeRet) bar((proxDia && podePassar ? '<button class="btn primary" id="psp">Fica no local para ' + dataBR(proxDia.data).slice(0, 5) + '</button><button class="btn" id="rt">Registrar retorno</button>' : '<button class="btn primary" id="rt">Registrar retorno</button>'));
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };

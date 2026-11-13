@@ -439,15 +439,21 @@ var CORE = (function () {
       var linhas = db.all('evento_itens');
       var outros = [];
       if (conv) {
-        var usados = {}, todasL = linhas;
+        var usados = {}, todasL = linhas, meu = porId(db.all('eventos'), conv.evento_id) || {};
         linhas = linhas.filter(function (l) { return l.evento_id === conv.evento_id; });
         linhas.forEach(function (l) { usados[l.item_id] = 1; });
-        if (!conv.coord) itens = itens.filter(function (i) { return usados[i.id]; });
-        else db.all('eventos').forEach(function (e) {
-          if (e.id === conv.evento_id || e.status === 'concluido') return;
+        db.all('eventos').forEach(function (e) {
+          if (e.id === conv.evento_id) return;
+          // Outros dias do mesmo evento (lista repetida): a equipe do dia vê em que pé está o material.
+          var mesmo = meu.serie && e.serie === meu.serie;
+          if (!mesmo && (!conv.coord || e.status === 'concluido')) return;
+          var le = todasL.filter(function (l) { return l.evento_id === e.id; });
+          if (mesmo) le.forEach(function (l) { usados[l.item_id] = 1; });
           outros.push({ id: e.id, nome: e.nome, data: e.data, status: e.status, serie: e.serie || '', outro: true, prestadores: [],
-            linhas: todasL.filter(function (l) { return l.evento_id === e.id; }).map(function (l) { return { item_id: l.item_id, qtd_saida: num(l.qtd_saida) }; }) });
+            retorno_por: mesmo && e.status === 'concluido' && /^Ficou no local/.test(e.retorno_por || '') ? 'Ficou no local' : '',
+            linhas: le.map(function (l) { return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida) }; }) });
         });
+        if (!conv.coord) itens = itens.filter(function (i) { return usados[i.id]; });
       }
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
         return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs, serie: e.serie || '',
@@ -1001,8 +1007,9 @@ var CORE = (function () {
     passarMaterial: function (db, p, s, quem, conv) {
       var todos = db.all('eventos'), ev = porId(todos, p.id), prox = porId(todos, p.para);
       if (!ev) falha('Evento não encontrado.');
+      // A equipe de qualquer um dos dois dias (pelo link do grupo) pode dar baixa no dia e passar o material adiante.
       if (s) pedeLista(s, null, ev.id);
-      else if (!(conv && conv.coord && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id)))) falha('Só o estoque ou o coordenador do evento pode passar o material adiante.');
+      else if (!(conv && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id)))) falha('Só o estoque ou a equipe destes dias pode passar o material adiante.');
       if (ev.status !== 'em_evento') falha('Só dá para passar adiante o material de um dia que já saiu e ainda não voltou.');
       if (!prox || prox.id === ev.id || !ev.serie || prox.serie !== ev.serie) falha('Escolha o outro dia deste mesmo evento.');
       if (prox.status !== 'montando') falha('O dia ' + dataCurta(prox.data) + ' já está com o material.');
