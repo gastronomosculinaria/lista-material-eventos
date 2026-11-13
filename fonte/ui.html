@@ -306,6 +306,14 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     fazer(b, api('salvarEvento', { evento: { nome: c.titulo || 'Evento', data: c.data, local: c.local, hora_inicio: c.hora_inicio, hora_fim: c.hora_fim, obs: '', prestadores: [], agenda_id: c.id } }),
       function (r) { ir('evento', { id: r.id }); });
   }
+  // Outros dias do mesmo evento (lista repetida): mesma série, em ordem de data.
+  function diasDaSerie(ev) {
+    if (!ev || !ev.serie) return [];
+    return (S.data.eventos || []).filter(function (y) { return y.serie === ev.serie && y.id !== ev.id && !y.outro; })
+      .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
+  }
+  function ficouNoLocal(ev) { return ev.status === 'concluido' && /^Ficou no local/.test(ev.retorno_por || ''); }
+  function statusTxt(ev) { return ficouNoLocal(ev) ? 'Ficou no local' : STATUS[ev.status] || ''; }
   function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord); }
   // "Ana Paula de Souza Lima" -> "Ana Lima"
   var SETORES = ['Salão', 'Cozinha', 'Lavagem', 'Frete', 'Barman'];
@@ -448,7 +456,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!s) {
       var meus = d.eventos.filter(function (e) { return !e.outro; });
       $('app').innerHTML = h + '<h2>Seu evento</h2>' + (meus.length ? '<div class="list">' + meus.map(function (e) {
-        return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span></button>';
+        return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div><span class="pill ' + e.status + '">' + statusTxt(e) + '</span></button>';
       }).join('') + '</div>' : '<div class="empty">Este evento não está mais disponível.</div>') +
         '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p>';
       document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
@@ -467,7 +475,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.5 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 26.8 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -515,7 +523,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $(alvo).innerHTML = l.length ? '<div class="list">' + l.map(function (x, k) {
         return '<button class="li" data-px' + alvo + '="' + k + '"><div class="mid"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(x.data) +
           (x.hora_inicio ? ' · ' + esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div></div>' +
-          (x.ev ? '<span class="pill ' + x.ev.status + '">' + STATUS[x.ev.status] + '</span>' : '<span class="pill montando">' + (s && s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
+          (x.ev ? '<span class="pill ' + x.ev.status + '">' + statusTxt(x.ev) + '</span>' : '<span class="pill montando">' + (s && s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum evento nos próximos ' + dias + ' dias.</div>';
       document.querySelectorAll('[data-px' + alvo + ']').forEach(function (b) {
         b.onclick = function () { var x = l[+b.getAttribute('data-px' + alvo)]; if (x.ev) ir('evento', { id: x.ev.id }); else daAgenda(x.c, b); };
@@ -917,7 +925,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
       var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < l.qtd_saida; });
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
-        '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : STATUS[e.status]) + '</span></button>';
+        '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : statusTxt(e)) + '</span></button>';
     }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
     if (s && (s.estoque || s.escala) && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda não abertos aqui.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
@@ -1131,6 +1139,50 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
   };
 
+  // Repete a lista de material deste evento em outros dias (eventos separados, um por dia).
+  function repetirLista(e) {
+    var cand = (S.data.eventos || []).filter(function (y) { return !y.outro && y.id !== e.id && y.status === 'montando' && (!y.data || !e.data || y.data >= addDias(e.data, -7)); })
+      .sort(function (a, b) { var x = a.serie && a.serie === e.serie ? 0 : 1, z = b.serie && b.serie === e.serie ? 0 : 1; return x - z || String(a.data).localeCompare(String(b.data)); });
+    var pecas = e.linhas.reduce(function (t, l) { return t + l.qtd_saida; }, 0);
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Repetir lista em outros dias"><h2>Repetir a lista em outros dias</h2>' +
+      '<p class="hint">Copia os ' + e.linhas.length + ' itens (' + pecas + ' peças) de <b>' + esc(e.nome) + '</b> (' + dataBR(e.data) + ') para os dias marcados. Depois, a lista de cada dia pode ser alterada separadamente. O estoque conta o material uma vez só, porque é o mesmo evento.</p>' +
+      (cand.length ? '<div class="list">' + cand.map(function (y) {
+        var mesma = y.serie && y.serie === e.serie;
+        return '<label class="li static" style="gap:10px;cursor:pointer"><input type="checkbox" data-rd="' + y.id + '"' + (mesma ? ' checked' : '') + ' style="width:22px;height:22px;flex:none">' +
+          '<div class="mid"><div class="nm">' + dataBR(y.data) + ' · ' + esc(y.nome) + '</div><div class="hint">' + esc([y.local, y.linhas.length ? 'já tem lista: ' + y.linhas.length + ' itens' : 'sem lista ainda', mesma ? 'outro dia deste evento' : ''].filter(Boolean).join(' · ')) + '</div></div></label>';
+      }).join('') + '</div>' : '<div class="empty">Nenhum outro evento separando material. Abra os outros dias pela agenda primeiro.</div>') +
+      '<div id="rpm" hidden style="margin-top:12px"><p class="hint" style="margin:0 0 6px">Algum dia marcado já tem lista. O que fazer com ela?</p>' +
+      '<label style="display:block;margin:4px 0"><input type="radio" name="rpmo" value="substituir" checked> Trocar pela lista deste evento</label>' +
+      '<label style="display:block;margin:4px 0"><input type="radio" name="rpmo" value="juntar"> Juntar: manter o que já tem e completar com esta lista</label></div>' +
+      '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px">' + (cand.length ? '<button class="btn primary" id="rpok">Repetir lista</button>' : '') + '<button class="btn" id="m-fc">Fechar</button></div></div></div>';
+    $('m-fc').onclick = fecharModal;
+    function marcados() { return [].map.call(document.querySelectorAll('[data-rd]:checked'), function (c) { return c.dataset.rd; }); }
+    function modo() { $('rpm').hidden = !marcados().some(function (id) { var y = evento(id); return y && y.linhas.length; }); }
+    document.querySelectorAll('[data-rd]').forEach(function (c) { c.onchange = modo; }); modo();
+    if ($('rpok')) $('rpok').onclick = function () {
+      var ds = marcados(); if (!ds.length) { toast('Marque pelo menos um dia.'); return; }
+      var m = (document.querySelector('[name=rpmo]:checked') || {}).value;
+      fazer(this, api('repetirLista', { id: e.id, destinos: ds, modo: $('rpm').hidden ? 'substituir' : m }), function () { fecharModal(); toast('Lista repetida em ' + ds.length + (ds.length > 1 ? ' dias' : ' dia')); render(); });
+    };
+  }
+  function addDias(d, n) { var t = new Date(d + 'T12:00:00'); if (isNaN(t)) return d; t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); }
+  // O material fica no local: o dia "de" termina e o dia "para" recebe o material sem nova conferência.
+  function passarMaterial(de, para) {
+    var antes = {}, mais = [], menos = [];
+    de.linhas.forEach(function (l) { antes[l.item_id] = l.qtd_saida; });
+    para.linhas.forEach(function (l) { var d = l.qtd_saida - (antes[l.item_id] || 0); if (d > 0) mais.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
+    de.linhas.forEach(function (l) { var p = para.linhas.filter(function (x) { return x.item_id === l.item_id; })[0], d = l.qtd_saida - (p ? p.qtd_saida : 0); if (d > 0) menos.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
+    function bloco(t, l) { return l.length ? '<p style="margin:10px 0 4px"><b>' + t + '</b></p><ul style="margin:0;padding-left:20px">' + l.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''; }
+    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Material fica no local"><h2>Material fica no local</h2>' +
+      '<p>O material de <b>' + dataBR(de.data) + '</b> continua no local para <b>' + dataBR(para.data) + '</b>. O dia ' + dataBR(de.data).slice(0, 5) + ' fica encerrado sem contar o retorno; a conferência do retorno é feita no último dia.</p>' +
+      (!para.linhas.length ? '<div class="err">A lista de ' + dataBR(para.data) + ' está vazia. Repita a lista nesse dia antes.</div>' : '') +
+      bloco('Levar a mais do depósito para ' + dataBR(para.data).slice(0, 5) + ':', mais) + bloco('Não está na lista de ' + dataBR(para.data).slice(0, 5) + ' (voltar ao depósito):', menos) +
+      (!mais.length && !menos.length && para.linhas.length ? '<p class="hint">As listas dos dois dias são iguais.</p>' : '') +
+      '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px"><button class="btn primary" id="psok"' + (para.linhas.length ? '' : ' disabled') + '>Confirmar</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
+    $('m-fc').onclick = fecharModal;
+    $('psok').onclick = function () { fazer(this, api('passarMaterial', { id: de.id, para: para.id }), function () { fecharModal(); toast('Material passou para ' + dataBR(para.data).slice(0, 5)); ir('evento', { id: para.id }); }); };
+  }
+
   V.evento = function () {
     var e = evento(S.p.id), s = sess();
     if (!e) { inicio(); return; }
@@ -1145,7 +1197,12 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     });
     var podeCarga = s ? s.papel === 'master' || s.escala : souPrestador(e) && S.data.convite.coord;
     var podeEsc = s && s.escala && (e.escala_status !== 'enviada' || s.papel === 'master');
-    var h = (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + STATUS[e.status] + '</span><span class="hint">' + pecas + ' peças</span></div>' +
+    var serieEv = diasDaSerie(e);
+    // Material que fica no local: passa deste dia para o próximo, ou vem do dia anterior.
+    var proxDia = e.status === 'em_evento' ? serieEv.filter(function (y) { return y.status === 'montando' && y.data >= e.data; })[0] : null;
+    var diaAnt = e.status === 'montando' ? serieEv.filter(function (y) { return y.status === 'em_evento' && y.data <= e.data; }).pop() : null;
+    var podePassar = podeLista(e) || (souPrestador(e) && S.data.convite.coord);
+    var h = (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + statusTxt(e) + '</span><span class="hint">' + pecas + ' peças</span></div>' +
       '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
       (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
       '<dt>Equipe</dt><dd>' + (e.prestadores.length ? '<a href="#" id="veq">Ver equipe (' + e.prestadores.length + ')</a>' : 'ninguém marcado') + '</dd>' +
@@ -1153,18 +1210,21 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (s && s.escala ? '<dt>Escala</dt><dd>' + (e.escala_status === 'enviada' ? 'Enviada por ' + esc(e.escala_por) + '<br><span class="hint">' + quando(e.escala_em) + '</span>'
         : 'Confirmar até terça ' + dataBR(e.prazo_escala) + (e.prazo_escala && e.prazo_escala < hoje() ? ' <b style="color:var(--bad)">(atrasada)</b>' : '')) + '</dd>' : '') +
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
-      (e.separado_por ? '<dt>Saída</dt><dd>Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span></dd>' : '') +
+      (serieEv.length ? '<dt>Outros dias</dt><dd>' + serieEv.map(function (y) { return '<a href="#" data-dia="' + y.id + '">' + dataBR(y.data) + '</a> <span class="hint">' + esc(statusTxt(y)) + '</span>'; }).join('<br>') +
+        '<br><span class="hint">Mesmo material. A lista de cada dia pode ser alterada separadamente.</span></dd>' : '') +
+      (e.separado_por ? '<dt>Saída</dt><dd>' + (/^Continuou no local/.test(e.conferido_saida) ? esc(e.conferido_saida) + '<br><span class="hint">Passado adiante por ' + esc(e.separado_por) + '</span>' : 'Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span>') + '</dd>' : '') +
       (e.status === 'concluido' ? '<dt>Retorno</dt><dd>' + esc(e.retorno_por) + (e.conferido_retorno ? '<br><span class="hint">Conferido por ' + esc(e.conferido_retorno) + '</span>' : '') + '<br><span class="hint">' + quando(e.concluido_em) + '</span></dd>' : '') +
       (s && perdas.pecas ? '<dt>Perdas</dt><dd><b style="color:var(--bad)">' + perdas.pecas + ' peças' + (perdas.valor ? ' · ' + moeda(perdas.valor) : '') + '</b>' +
         (perdas.semCusto ? '<br><span class="hint">' + perdas.semCusto + ' item(ns) sem custo de reposição cadastrado</span>' : '') + '</dd>' : '') + '</dl></div>';
     h += '<h2>Material</h2>';
     var gEv = agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); });
     var aba = S.p.aba || 'Todos';
-    if (e.linhas.length) h += '<div class="tools"><button class="btn" id="imp">Imprimir</button><button class="btn" id="cop">Copiar para WhatsApp</button></div>' +
+    if (e.linhas.length) h += '<div class="tools"><button class="btn" id="imp">Imprimir</button><button class="btn" id="cop">Copiar para WhatsApp</button>' +
+      (s && (s.estoque || s.separa) ? '<button class="btn" id="rep">Repetir em outros dias</button>' : '') + '</div>' +
       (gEv.length > 1 ? chipsGrupos(gEv.map(function (g) { return g[0]; }), aba, 'data-aba') : '');
     function linhaEv(l) {
       var it = item(l.item_id) || { nome: l.nome };
-      var ret = l.qtd_retorno != null, falt = ret && l.qtd_retorno < l.qtd_saida;
+      var ret = l.qtd_retorno != null && !ficouNoLocal(e), falt = ret && l.qtd_retorno < l.qtd_saida;
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(it)) + '</div>' +
         '<div class="qty">Saiu <b>' + l.qtd_saida + '</b>' + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (l.qtd_saida - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
@@ -1182,8 +1242,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     else if (podeLista(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
-    if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? '<button class="btn primary" id="cs">Fechar lista</button>' : ''));
-    else if (podeRet) bar('<button class="btn primary" id="rt">Registrar retorno</button>');
+    if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? (diaAnt ? '<button class="btn primary" id="psa">Material já está no local</button>' : '<button class="btn primary" id="cs">Fechar lista</button>') : ''));
+    else if (podeRet) bar((proxDia && podePassar ? '<button class="btn primary" id="psp">Fica no local para ' + dataBR(proxDia.data).slice(0, 5) + '</button><button class="btn" id="rt">Registrar retorno</button>' : '<button class="btn primary" id="rt">Registrar retorno</button>'));
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
     if ($('escalar')) $('escalar').onclick = function () { ir('escalar', { id: e.id }); };
@@ -1249,7 +1309,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var info = dataBR(e.data) + (e.hora_inicio ? ' · ' + e.hora_inicio + (e.hora_fim ? '–' + e.hora_fim : '') : '') + (e.local ? ' · ' + e.local : '');
       var pr = e.prestadores.map(function (p) { return p.nome; }).join(', ');
       var el = $('print') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'print' }));
-      el.innerHTML = '<img class="plogo" src="__MARCA__/logo-terracota.png" alt=""><h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(STATUS[e.status]) + '</div>' +
+      el.innerHTML = '<img class="plogo" src="__MARCA__/logo-terracota.png" alt=""><h1>' + esc(e.nome) + '</h1><div class="info">' + esc(info) + (pr ? '<br>Prestadores: ' + esc(pr) : '') + '<br>' + pecas + ' peças · Status: ' + esc(statusTxt(e)) + '</div>' +
         gEv.map(function (g) {
           return '<h2>' + esc(g[0]) + '</h2>' + porSub(g[0], g[1], itemDaLinha, function (l) {
             return '<li><span>☐</span><span class="q">' + l.qtd_saida + '</span><span>' + esc(nomeL(l)) + '</span><span class="v">' + (l.qtd_retorno != null ? 'voltou ' + l.qtd_retorno : 'voltou ____') + '</span></li>';
@@ -1279,6 +1339,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       });
     };
     if ($('rt')) $('rt').onclick = function () { ir('retorno', { id: e.id }); };
+    document.querySelectorAll('[data-dia]').forEach(function (a) { a.onclick = function (x) { x.preventDefault(); ir('evento', { id: a.dataset.dia }); }; });
+    if ($('rep')) $('rep').onclick = function () { repetirLista(e); };
+    if ($('psp')) $('psp').onclick = function () { passarMaterial(e, proxDia); };
+    if ($('psa')) $('psa').onclick = function () { passarMaterial(diaAnt, e); };
     if ($('ed')) $('ed').onclick = function () { ir('eventoForm', { id: e.id }); };
     if ($('reab')) $('reab').onclick = function () { fazer(this, api('reabrirMontagem', { id: e.id }), function () { toast('Lista reaberta para ajustes'); render(); }); };
     if ($('ex')) $('ex').onclick = function () {
@@ -1300,10 +1364,17 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var qtd = S.p.qtd;
     // material que já saiu ou está separado para outro evento na mesma data
     var conf = {};
+    var maxSerie = {};
     S.data.eventos.forEach(function (y) {
       if (y.id === e.id || y.status === 'concluido') return;
+      if (e.serie && y.serie === e.serie) return; // outro dia do mesmo evento: é o mesmo material
       if (y.status !== 'em_evento' && !(e.data && y.data === e.data)) return;
-      y.linhas.forEach(function (l) { var x = conf[l.item_id] || (conf[l.item_id] = { qtd: 0, evs: [] }); x.qtd += l.qtd_saida; if (x.evs.indexOf(y.nome) < 0) x.evs.push(y.nome); });
+      var k = y.serie || y.id;
+      y.linhas.forEach(function (l) {
+        var x = conf[l.item_id] || (conf[l.item_id] = { qtd: 0, evs: [] }), mk = l.item_id + '|' + k, ant = maxSerie[mk] || 0;
+        if (l.qtd_saida > ant) { x.qtd += l.qtd_saida - ant; maxSerie[mk] = l.qtd_saida; }
+        if (x.evs.indexOf(y.nome) < 0) x.evs.push(y.nome);
+      });
     });
     function livre(i) { if (!(i.qtd_total > 0)) return Infinity; return Math.max(0, i.qtd_total - ((conf[i.id] || {}).qtd || 0)); }
     function info(i) {

@@ -126,29 +126,45 @@ var CORE = (function () {
     db.all('evento_itens').forEach(function (l) { if (ativos[l.evento_id]) r[l.item_id] = (r[l.item_id] || 0) + num(l.qtd_saida); });
     return r;
   }
+  // Evento de vários dias (mesma lista repetida): os dias da mesma série usam o MESMO material,
+  // então dentro da série vale o maior número de cada item, e não a soma.
+  function serieDe(e) { return e.serie || e.id; }
+  function somarPorSerie(db, evs) {
+    var porSerie = {}, nomes = {};
+    db.all('evento_itens').forEach(function (l) {
+      var y = evs[l.evento_id]; if (!y) return;
+      var k = serieDe(y), m = porSerie[l.item_id] || (porSerie[l.item_id] = {});
+      m[k] = Math.max(m[k] || 0, num(l.qtd_saida));
+      var n = nomes[l.item_id] || (nomes[l.item_id] = []); if (n.indexOf(y.nome) < 0) n.push(y.nome);
+    });
+    var r = {};
+    Object.keys(porSerie).forEach(function (id) {
+      var q = 0; Object.keys(porSerie[id]).forEach(function (k) { q += porSerie[id][k]; });
+      r[id] = { qtd: q, eventos: nomes[id] };
+    });
+    return r;
+  }
   // O que conflita com um evento: material que já saiu (em outro evento) ou que está separado
-  // para outro evento na MESMA data. Devolve { item_id: { qtd, eventos: [nomes] } }.
+  // para outro evento na MESMA data. Outros dias do mesmo evento (mesma série) não contam.
+  // Devolve { item_id: { qtd, eventos: [nomes] } }.
   function comprometido(db, ev) {
     var conf = {};
     db.all('eventos').forEach(function (y) {
       if (y.status === 'concluido' || (ev && y.id === ev.id)) return;
+      if (ev && ev.serie && y.serie === ev.serie) return;
       if (y.status === 'em_evento' || (ev && ev.data && y.data === ev.data)) conf[y.id] = y;
     });
-    var r = {};
-    db.all('evento_itens').forEach(function (l) {
-      var y = conf[l.evento_id]; if (!y) return;
-      var x = r[l.item_id] || (r[l.item_id] = { qtd: 0, eventos: [] });
-      x.qtd += num(l.qtd_saida); if (x.eventos.indexOf(y.nome) < 0) x.eventos.push(y.nome);
-    });
-    return r;
+    return somarPorSerie(db, conf);
   }
   // Material fora do depósito agora (eventos com saída confirmada).
   function foraDoDeposito(db) {
-    var fora = {}, r = {};
-    db.all('eventos').forEach(function (e) { if (e.status === 'em_evento') fora[e.id] = true; });
-    db.all('evento_itens').forEach(function (l) { if (fora[l.evento_id]) r[l.item_id] = (r[l.item_id] || 0) + num(l.qtd_saida); });
+    var fora = {}, r = {}, c;
+    db.all('eventos').forEach(function (e) { if (e.status === 'em_evento') fora[e.id] = e; });
+    c = somarPorSerie(db, fora);
+    Object.keys(c).forEach(function (id) { r[id] = c[id].qtd; });
     return r;
   }
+  function dataCurta(d) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || '')); return m ? m[3] + '/' + m[2] : String(d || 'sem data'); }
   function nomeItem(it) { return it ? it.nome + (it.numero ? ' nº ' + it.numero : '') : ''; }
   function confere(db, ev, linhas, itens) {
     var comp = comprometido(db, ev);
@@ -411,12 +427,12 @@ var CORE = (function () {
         if (!conv.coord) itens = itens.filter(function (i) { return usados[i.id]; });
         else db.all('eventos').forEach(function (e) {
           if (e.id === conv.evento_id || e.status === 'concluido') return;
-          outros.push({ id: e.id, nome: e.nome, data: e.data, status: e.status, outro: true, prestadores: [],
+          outros.push({ id: e.id, nome: e.nome, data: e.data, status: e.status, serie: e.serie || '', outro: true, prestadores: [],
             linhas: todasL.filter(function (l) { return l.evento_id === e.id; }).map(function (l) { return { item_id: l.item_id, qtd_saida: num(l.qtd_saida) }; }) });
         });
       }
       var eventos = db.all('eventos').filter(function (e) { return !conv || e.id === conv.evento_id; }).map(function (e) {
-        return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs,
+        return { id: e.id, nome: e.nome, data: e.data, local: e.local, status: e.status, obs: e.obs, serie: e.serie || '',
           hora_inicio: e.hora_inicio || '', hora_fim: e.hora_fim || '', na_agenda: !!e.agenda_id,
           carga: s || (conv && conv.coord) ? e.carga || '' : '', descarga: s || (conv && conv.coord) ? e.descarga || '' : '',
           prestadores: ordemNome(json(e.prestadores, [])).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
@@ -878,6 +894,81 @@ var CORE = (function () {
       return true;
     },
 
+    // Evento de vários dias: copia a lista de material deste evento para outros dias (eventos separados).
+    // Cada dia continua com a própria lista e pode ser alterado depois. Os dias ficam ligados (coluna serie)
+    // para o estoque não contar o mesmo material duas vezes.
+    repetirLista: function (db, p, s, quem) {
+      if (!s) falha('Entre com sua senha na Área da equipe para repetir a lista em outros dias.');
+      pedeLista(s, null, p.id);
+      var todos = db.all('eventos'), orig = porId(todos, p.id);
+      if (!orig) falha('Evento não encontrado.');
+      var linhasO = db.all('evento_itens').filter(function (l) { return l.evento_id === orig.id; });
+      if (!linhasO.length) falha('A lista de material deste evento está vazia.');
+      var ids = (p.destinos || []).filter(function (id, i, a) { return id && id !== orig.id && a.indexOf(id) === i; });
+      if (!ids.length) falha('Escolha pelo menos um dia para repetir a lista.');
+      var modo = p.modo === 'juntar' ? 'juntar' : 'substituir', serie = orig.serie || orig.id, itens = db.all('itens'), plano = [];
+      var dests = ids.map(function (id) {
+        var d = porId(todos, id);
+        if (!d) falha('Um dos eventos escolhidos não existe mais. Atualize a tela.');
+        if (d.status !== 'montando') falha('"' + d.nome + '" (' + dataCurta(d.data) + ') já teve a saída confirmada. Reabra a lista dele antes de repetir.');
+        return d;
+      });
+      // Primeiro confere tudo; só grava se todos os dias couberem no estoque.
+      dests.forEach(function (d) {
+        var q = {};
+        if (modo === 'juntar') db.all('evento_itens').forEach(function (l) { if (l.evento_id === d.id) q[l.item_id] = num(l.qtd_saida); });
+        linhasO.forEach(function (l) { q[l.item_id] = Math.max(q[l.item_id] || 0, num(l.qtd_saida)); });
+        var novas = [];
+        Object.keys(q).forEach(function (id) {
+          var it = porId(itens, id), n = Math.round(q[id]); if (!it || n <= 0) return;
+          if (it.tipo === 'equipamento') n = 1;
+          novas.push({ id: uid(), evento_id: d.id, item_id: it.id, item_nome: nomeItem(it), qtd_saida: String(n), qtd_retorno: '', justificativa: '', motivo: '' });
+        });
+        try { confere(db, { id: d.id, data: d.data, serie: serie }, novas, itens); }
+        catch (e) { falha(d.nome + ' (' + dataCurta(d.data) + '): ' + e.message); }
+        plano.push({ d: d, novas: novas });
+      });
+      if (orig.serie !== serie) db.update('eventos', orig.id, { serie: serie });
+      plano.forEach(function (x) {
+        db.update('eventos', x.d.id, { serie: serie });
+        db.removeWhere('evento_itens', function (l) { return l.evento_id === x.d.id; });
+        x.novas.forEach(function (n) { db.insert('evento_itens', n); });
+        sincAgenda(db, x.d.id, quem);
+      });
+      log(db, quem, 'Repetiu a lista de material em outros dias', orig.nome + ' (' + dataCurta(orig.data) + ') → ' +
+        dests.map(function (d) { return d.nome + ' (' + dataCurta(d.data) + ')'; }).join(', ') + (modo === 'juntar' ? ' — juntou com a lista que já existia' : ' — substituiu a lista que existia'));
+      return { n: dests.length };
+    },
+
+    // Evento de vários dias: o material fica no local e passa para o dia seguinte sem nova conferência.
+    // O dia atual fica concluído (tudo "passou adiante") e o próximo dia fica com o material no evento.
+    passarMaterial: function (db, p, s, quem, conv) {
+      var todos = db.all('eventos'), ev = porId(todos, p.id), prox = porId(todos, p.para);
+      if (!ev) falha('Evento não encontrado.');
+      if (s) pedeLista(s, null, ev.id);
+      else if (!(conv && conv.coord && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id)))) falha('Só o estoque ou o coordenador do evento pode passar o material adiante.');
+      if (ev.status !== 'em_evento') falha('Só dá para passar adiante o material de um dia que já saiu e ainda não voltou.');
+      if (!prox || prox.id === ev.id || !ev.serie || prox.serie !== ev.serie) falha('Escolha o outro dia deste mesmo evento.');
+      if (prox.status !== 'montando') falha('O dia ' + dataCurta(prox.data) + ' já está com o material.');
+      var itens = db.all('itens'), todas = db.all('evento_itens');
+      var la = todas.filter(function (l) { return l.evento_id === ev.id; }), lp = todas.filter(function (l) { return l.evento_id === prox.id; });
+      if (!lp.length) falha('A lista de ' + dataCurta(prox.data) + ' está vazia. Repita ou separe a lista desse dia antes.');
+      confere(db, prox, lp, itens);
+      var antes = {}, mais = [], menos = [];
+      la.forEach(function (l) { antes[l.item_id] = num(l.qtd_saida); });
+      lp.forEach(function (l) { var d = num(l.qtd_saida) - (antes[l.item_id] || 0); if (d > 0) mais.push(d + ' × ' + l.item_nome); delete antes[l.item_id]; });
+      la.forEach(function (l) { var dp = lp.filter(function (x) { return x.item_id === l.item_id; })[0], d = num(l.qtd_saida) - (dp ? num(dp.qtd_saida) : 0); if (d > 0) menos.push(d + ' × ' + l.item_nome); });
+      la.forEach(function (l) { db.update('evento_itens', l.id, { qtd_retorno: l.qtd_saida, justificativa: '', motivo: '', perda: '', perda_por: '' }); });
+      var por = texto(p.who && p.who.nome, 80);
+      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: 'Ficou no local para ' + dataCurta(prox.data) + ' (' + por + ')', conferido_retorno: '' });
+      db.update('eventos', prox.id, { status: 'em_evento', separado_por: por, conferido_saida: 'Continuou no local desde ' + dataCurta(ev.data) });
+      log(db, quem, 'Material ficou no local para o dia seguinte', ev.nome + ' (' + dataCurta(ev.data) + ') → ' + prox.nome + ' (' + dataCurta(prox.data) + ')' +
+        (mais.length ? ' | Levar a mais do depósito: ' + mais.join(', ') : '') + (menos.length ? ' | Voltar ao depósito: ' + menos.join(', ') : ''));
+      sincEscalas(db, porId(db.all('eventos'), prox.id), por);
+      sincAgenda(db, ev.id, quem); sincAgenda(db, prox.id, quem);
+      return { mais: mais, menos: menos };
+    },
+
     // Quem fez a carga e a descarga (gente da equipe ou de fora): Master, coordenação ou o coordenador do evento.
     salvarCarga: function (db, p, s, quem, conv) {
       var ev = porId(db.all('eventos'), p.id);
@@ -1094,7 +1185,7 @@ var CORE = (function () {
     itens: ['id', 'nome', 'categoria', 'descricao', 'foto', 'qtd_total', 'ativo', 'criado_em', 'grupo', 'subgrupo', 'tipo', 'numero', 'custo'],
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave',
-      'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga'],
+      'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga', 'serie'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
