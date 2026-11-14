@@ -301,6 +301,25 @@ var CORE = (function () {
     if (s) return;
     if (!(conv && conv.evento_id === ev.id)) falha('Só quem está na equipe deste evento pode fazer isso. Abra pelo link enviado no grupo do evento.');
   }
+  // O que sobrou na contagem do fim do dia passa a ser o material do dia seguinte (mesmo evento, mesmo local).
+  // O que estava planejado para o dia seguinte e não está no local fica de fora: quando chegar, entra como extra.
+  function passarAdiante(db, ev, prox, alu, quem) {
+    var ficou = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id && num(l.qtd_retorno) > 0; });
+    var plano = {}, faltam = [];
+    db.all('evento_itens').forEach(function (l) { if (l.evento_id === prox.id) plano[l.item_id] = l; });
+    ficou.forEach(function (l) { var pl = plano[l.item_id]; if (pl && num(pl.qtd_saida) > num(l.qtd_retorno)) faltam.push((num(pl.qtd_saida) - num(l.qtd_retorno)) + ' × ' + l.item_nome); delete plano[l.item_id]; });
+    Object.keys(plano).forEach(function (k) { faltam.push(plano[k].qtd_saida + ' × ' + plano[k].item_nome); });
+    db.removeWhere('evento_itens', function (l) { return l.evento_id === prox.id; });
+    ficou.forEach(function (l) { db.insert('evento_itens', { id: uid(), evento_id: prox.id, item_id: l.item_id, item_nome: l.item_nome, qtd_saida: String(num(l.qtd_retorno)), qtd_retorno: '', justificativa: '', motivo: '', qtd_extra: '', extra_por: '', extra_em: '', qtd_chegada: '' }); });
+    var dados = { status: 'em_evento', separado_por: texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 80), conferido_saida: 'Continuou no local desde ' + dataCurta(ev.data) + ' (contagem do fim do dia)',
+      lista_estoque: ev.lista_estoque || prox.lista_estoque || '', chegada_por: '', chegada_em: '', chegada_status: '', chegada_obs: '', chegada_revisao: '' };
+    if (alu && (alu.itens.length || alu.fotos.length)) dados.aluguel = JSON.stringify({ fornecedor: alu.fornecedor, obs: alu.obs, fotos: alu.fotos, por: alu.por, em: alu.em, chegada_ok: '', retorno_ok: '',
+      itens: alu.itens.map(function (x) { return { id: x.id, nome: x.nome, qtd: x.retorno != null ? x.retorno : x.qtd }; }).filter(function (x) { return num(x.qtd) > 0; }) });
+    db.update('eventos', prox.id, dados);
+    sincEscalas(db, porId(db.all('eventos'), prox.id), dados.separado_por);
+    return ' | Ficou no local para ' + dataCurta(prox.data) + ': ' + ficou.map(function (l) { return l.qtd_retorno + ' × ' + l.item_nome; }).join(', ') +
+      (faltam.length ? ' | Planejado para ' + dataCurta(prox.data) + ' e não está no local (entra como extra quando chegar): ' + faltam.join(', ') : '');
+  }
   function chaveNova() { return (uid() + uid()).replace(/[^a-z0-9]/g, '').slice(0, 14); }
   // CPF com dígitos verificadores
   function cpfOk(c) {
@@ -498,6 +517,7 @@ var CORE = (function () {
           if (mesmo) le.forEach(function (l) { usados[l.item_id] = 1; });
           outros.push({ id: e.id, nome: e.nome, data: e.data, status: e.status, serie: e.serie || '', outro: true, prestadores: [],
             retorno_por: mesmo && e.status === 'concluido' && /^Ficou no local/.test(e.retorno_por || '') ? 'Ficou no local' : '',
+            aluguel: mesmo && e.status === 'em_evento' ? aluguelDe(e) : null,
             linhas: le.map(function (l) { return { item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida), qtd_extra: num(l.qtd_extra) }; }) });
         });
       }
@@ -1256,7 +1276,11 @@ var CORE = (function () {
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
       if (ev.status !== 'em_evento') falha('Este evento não está aguardando retorno.');
-      if (!s && !(conv && conv.evento_id === ev.id))
+      // Evento de vários dias: a contagem do fim do dia dá baixa nas perdas e o que sobrou vira o material do dia seguinte (2026-11-14).
+      var prox = p.para ? porId(db.all('eventos'), p.para) : null;
+      if (p.para && (!prox || prox.id === ev.id || !ev.serie || prox.serie !== ev.serie)) falha('Escolha o outro dia deste mesmo evento.');
+      if (prox && prox.status !== 'montando') falha('O dia ' + dataCurta(prox.data) + ' já está com o material.');
+      if (!s && !(conv && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id))))
         falha('Só quem está na lista deste evento pode registrar o retorno. Abra pelo link enviado no grupo do evento.');
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
@@ -1300,11 +1324,15 @@ var CORE = (function () {
         }
         alu.retorno_ok = quem.nome; db.update('eventos', ev.id, { aluguel: JSON.stringify(alu) });
       }
-      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone, conferido_retorno: confRet });
-      log(db, quem, 'Registrou retorno do material', ev.nome + ': ' + resumo.join(', ') + aluTxt +
+      var passou = '';
+      if (prox) passou = passarAdiante(db, ev, prox, alu, quem);
+      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), conferido_retorno: confRet,
+        retorno_por: prox ? 'Ficou no local para ' + dataCurta(prox.data) + ' — contado por ' + String(quem.nome || '').replace(/\s*\[.*\]\s*$/, '') : quem.nome + ' ' + quem.telefone });
+      log(db, quem, prox ? 'Contou o material no fim do dia (ficou no local)' : 'Registrou retorno do material', ev.nome + (prox ? ' (' + dataCurta(ev.data) + ' → ' + dataCurta(prox.data) + ')' : '') + ': ' + resumo.join(', ') + aluTxt + passou +
         (faltas.length ? ' | Faltas (aguardando confirmação do Master/estoque): ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
         (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Conferido por ' + confRet);
       sincAgenda(db, ev.id, quem);
+      if (prox) sincAgenda(db, prox.id, quem);
       return true;
     },
 
