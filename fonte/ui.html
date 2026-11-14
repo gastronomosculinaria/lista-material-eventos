@@ -512,7 +512,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.7 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.8 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1282,23 +1282,6 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
   }
   function addDias(d, n) { var t = new Date(d + 'T12:00:00'); if (isNaN(t)) return d; t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); }
-  // O material fica no local: o dia "de" termina e o dia "para" recebe o material sem nova conferência.
-  function passarMaterial(de, para) {
-    var antes = {}, mais = [], menos = [];
-    de.linhas.forEach(function (l) { antes[l.item_id] = tot(l); });
-    para.linhas.forEach(function (l) { var d = l.qtd_saida - (antes[l.item_id] || 0); if (d > 0) mais.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
-    de.linhas.forEach(function (l) { var p = para.linhas.filter(function (x) { return x.item_id === l.item_id; })[0], d = tot(l) - (p ? p.qtd_saida : 0); if (d > 0) menos.push(d + ' × ' + nomeIt(item(l.item_id) || { nome: l.nome })); });
-    function bloco(t, l) { return l.length ? '<p style="margin:10px 0 4px"><b>' + t + '</b></p><ul style="margin:0;padding-left:20px">' + l.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''; }
-    $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Material fica no local"><h2>Material fica no local</h2>' +
-      '<p>O material de <b>' + dataBR(de.data) + '</b> continua no local para <b>' + dataBR(para.data) + '</b>. O dia ' + dataBR(de.data).slice(0, 5) + ' fica encerrado sem contar o retorno; a conferência do retorno é feita no último dia.</p>' +
-      (!para.linhas.length ? '<div class="err">A lista de ' + dataBR(para.data) + ' está vazia. Repita a lista nesse dia antes.</div>' : '') +
-      bloco('Levar a mais do depósito para ' + dataBR(para.data).slice(0, 5) + ':', mais) + bloco('Não está na lista de ' + dataBR(para.data).slice(0, 5) + ' (voltar ao depósito):', menos) +
-      (!mais.length && !menos.length && para.linhas.length ? '<p class="hint">As listas dos dois dias são iguais.</p>' : '') +
-      '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px"><button class="btn primary" id="psok"' + (para.linhas.length ? '' : ' disabled') + '>Confirmar</button><button class="btn" id="m-fc">Fechar</button></div></div></div>';
-    $('m-fc').onclick = fecharModal;
-    $('psok').onclick = function () { fazer(this, api('passarMaterial', { id: de.id, para: para.id }), function () { fecharModal(); toast('Material passou para ' + dataBR(para.data).slice(0, 5)); if (para.outro) render(); else ir('evento', { id: para.id }); }); };
-  }
-
   V.evento = function () {
     var e = evento(S.p.id), s = sess();
     if (!e) { inicio(); return; }
@@ -1327,7 +1310,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         : 'Confirmar até terça ' + dataBR(e.prazo_escala) + (e.prazo_escala && e.prazo_escala < hoje() ? ' <b style="color:var(--bad)">(atrasada)</b>' : '')) + '</dd>' : '') +
       (e.obs ? '<dt>Obs.</dt><dd>' + esc(e.obs) + '</dd>' : '') +
       (serieEv.length ? '<dt>Outros dias</dt><dd>' + serieEv.map(function (y) { return (y.outro ? '<b>' + dataBR(y.data) + '</b>' : '<a href="#" data-dia="' + y.id + '">' + dataBR(y.data) + '</a>') + ' <span class="hint">' + esc(statusTxt(y)) + '</span>'; }).join('<br>') +
-        '<br><span class="hint">Mesmo material. A lista de cada dia pode ser alterada separadamente.</span></dd>' : '') +
+        '<br><span class="hint">Mesmo material, que fica no local. No fim de cada dia a equipe conta o que ficou (as perdas têm baixa) e isso vira o material do dia seguinte.</span>' +
+        (diaAnt ? '<br><span class="hint"><b>Aguardando a contagem do fim de ' + dataBR(diaAnt.data).slice(0, 5) + '.</b></span>' : '') + '</dd>' : '') +
       (e.separado_por ? '<dt>Saída</dt><dd>' + (/^Continuou no local/.test(e.conferido_saida) ? esc(e.conferido_saida) + '<br><span class="hint">Passado adiante por ' + esc(e.separado_por) + '</span>' : 'Separado por ' + esc(e.separado_por) + '<br><span class="hint">Conferido por ' + esc(e.conferido_saida) + '</span>') + '</dd>' : '') +
       (e.chegada_status ? '<dt>Chegada</dt><dd>' + (e.chegada_status === 'ok' ? 'Chegou tudo certo' : e.chegada_status === 'revisada' ? 'Diferença conferida pelo estoque' : '<b style="color:var(--bad)">Com diferença</b>') +
         '<br><span class="hint">Conferido por ' + esc(e.chegada_por) + ', ' + quando(e.chegada_em) + (e.chegada_revisao ? '<br>Estoque: ' + esc(e.chegada_revisao) : '') + '</span></dd>' : '') +
@@ -1339,7 +1323,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Diferença na chegada para conferir</b><p class="hint" style="margin:6px 0">Veja em cada item “Chegou” em vermelho' + (e.chegada_obs ? '. Obs. da equipe: ' + esc(e.chegada_obs) : '') + '.</p>' +
         '<input type="text" id="rvn" placeholder="O que foi verificado (opcional)"><div class="row" style="margin-top:8px"><button class="btn primary" id="rvok">Marcar como conferido</button></div></div>';
     h += '<h2>Material</h2>';
-    if (e.status === 'em_evento' && naEquipe) h += '<div class="tools"><button class="btn' + (e.chegada_status ? '' : ' primary') + '" id="chg">' + (e.chegada_status ? 'Refazer conferência da chegada' : 'Conferir chegada') + '</button><button class="btn" id="xtr">+ Adicionar extra</button></div>';
+    if (e.status === 'em_evento' && naEquipe) h += '<div class="tools">' + (/^Continuou no local/.test(e.conferido_saida || '') ? '' : '<button class="btn' + (e.chegada_status ? '' : ' primary') + '" id="chg">' + (e.chegada_status ? 'Refazer conferência da chegada' : 'Conferir chegada') + '</button>') + '<button class="btn" id="xtr">+ Adicionar extra</button></div>';
     if (temAluguel(alu)) h += '<div class="panel" style="margin:10px 0"><b>Material alugado</b>' + (alu.fornecedor ? ' · ' + esc(alu.fornecedor) : '') + fotosAlu(alu) +
       (alu.itens.length ? '<ul style="margin:6px 0 0;padding-left:20px">' + alu.itens.map(function (x) { return '<li>' + esc(x.qtd) + ' × ' + esc(x.nome) + (x.chegada != null ? ' · chegou ' + esc(x.chegada) : '') + (x.retorno != null ? ' · voltou ' + esc(x.retorno) : '') + '</li>'; }).join('') + '</ul>' : '') +
       (alu.obs ? '<p class="hint" style="margin:6px 0 0">' + esc(alu.obs) + '</p>' : '') + (alu.chegada_ok ? '<p class="hint" style="margin:6px 0 0">Chegada conferida por ' + esc(alu.chegada_ok) + '</p>' : '') +
@@ -1352,7 +1336,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (gEv.length > 1 ? chipsGrupos(gEv.map(function (g) { return g[0]; }), aba, 'data-aba') : '');
     function linhaEv(l) {
       var it = item(l.item_id) || { nome: l.nome };
-      var ret = l.qtd_retorno != null && !ficouNoLocal(e), falt = ret && l.qtd_retorno < tot(l), ch = l.qtd_chegada, chDif = ch != null && ch !== tot(l);
+      var ret = l.qtd_retorno != null, falt = ret && l.qtd_retorno < tot(l), ch = l.qtd_chegada, chDif = ch != null && ch !== tot(l);
       return '<div class="li static"><div class="ph">' + foto(it) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(it)) + '</div>' +
         '<div class="qty">' + (l.qtd_saida ? 'Saiu <b>' + l.qtd_saida + '</b>' : '') + (l.qtd_extra ? (l.qtd_saida ? ' · ' : '') + '<b>+' + l.qtd_extra + ' extra</b>' : '') +
         (ch != null ? ' · Chegou <b' + (chDif ? ' style="color:var(--bad)"' : '') + '>' + ch + '</b>' : '') + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
@@ -1373,9 +1357,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     else if (podeReabrir(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
-    if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e) && e.linhas.length) bar('<button class="btn primary" id="psa">Receber o material de ' + dataBR(diaAnt.data).slice(0, 5) + '</button>');
-    else if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length ? (diaAnt ? '<button class="btn primary" id="psa">Material já está no local</button>' : '<button class="btn primary" id="cs">Fechar lista</button>') : ''));
-    else if (podeRet) bar((proxDia && podePassar ? '<button class="btn primary" id="psp">Fica no local para ' + dataBR(proxDia.data).slice(0, 5) + '</button><button class="btn" id="rt">Registrar retorno</button>' : '<button class="btn primary" id="rt">Registrar retorno</button>'));
+    var bpsa = diaAnt ? '<button class="btn primary" id="psa">Contar o que ficou de ' + dataBR(diaAnt.data).slice(0, 5) + '</button>' : '';
+    if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e)) bar(bpsa);
+    else if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length && !diaAnt ? '<button class="btn primary" id="cs">Fechar lista</button>' : '') + bpsa);
+    else if (podeRet) bar((proxDia && podePassar ? '<button class="btn primary" id="psp">Contagem do fim do dia (fica para ' + dataBR(proxDia.data).slice(0, 5) + ')</button><button class="btn" id="rt">Registrar retorno</button>' : '<button class="btn primary" id="rt">Registrar retorno</button>'));
     else bar('');
     if ($('mt')) $('mt').onclick = function () { ir('montar', { id: e.id }); };
     document.querySelectorAll('[data-cs]').forEach(function (a) {
@@ -1477,8 +1462,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if ($('rvok')) $('rvok').onclick = function () { fazer(this, api('revisarChegada', { id: e.id, nota: $('rvn').value }), function () { toast('Conferência marcada como vista'); render(); }); };
     document.querySelectorAll('[data-dia]').forEach(function (a) { a.onclick = function (x) { x.preventDefault(); ir('evento', { id: a.dataset.dia }); }; });
     if ($('rep')) $('rep').onclick = function () { repetirLista(e); };
-    if ($('psp')) $('psp').onclick = function () { passarMaterial(e, proxDia); };
-    if ($('psa')) $('psa').onclick = function () { passarMaterial(diaAnt, e); };
+    if ($('psp')) $('psp').onclick = function () { ir('retorno', { id: e.id, para: proxDia.id }); };
+    if ($('psa')) $('psa').onclick = function () { ir('retorno', { id: diaAnt.id, para: e.id }); };
     if ($('ed')) $('ed').onclick = function () { ir('eventoForm', { id: e.id }); };
     if ($('reab')) $('reab').onclick = function () { fazer(this, api('reabrirMontagem', { id: e.id }), function () { toast('Lista reaberta para ajustes'); render(); }); };
     if ($('ex')) $('ex').onclick = function () {
@@ -1577,19 +1562,19 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   };
 
   V.retorno = function () {
-    var e = evento(S.p.id);
-    header('Retorno: ' + e.nome, true);
+    var e = evento(S.p.id), para = S.p.para ? evento(S.p.para) : null;
+    header((para ? 'Contagem do fim do dia: ' : 'Retorno: ') + e.nome, true);
     var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' }); R.f = R.f || {};
     function consumo(id) { return (S.data.consumo || []).indexOf(grupoDoItem(id)) >= 0; }
     function guardar() { ls(chave, R); }
     var motivos = S.data.motivos || [];
-    $('app').innerHTML = '<p class="sub">Conte o que voltou. Se voltou menos, escolha o motivo. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
-      '<div class="tools"><button class="btn" id="tudo">Voltou tudo certo</button><button class="btn" id="qr">📷 Ler QR</button></div><div style="height:6px"></div>' +
+    $('app').innerHTML = (para ? '<div class="panel" style="margin-bottom:10px"><b>' + dataBR(e.data) + ' → ' + dataBR(para.data) + '</b><br>Conte o material que ficou no local no fim do dia. O que faltar tem baixa como perda e o que ficou passa a ser o material de ' + dataBR(para.data).slice(0, 5) + '.</div>' : '') + '<p class="sub">Conte o que ' + (para ? 'ficou' : 'voltou') + '. Se ' + (para ? 'ficou' : 'voltou') + ' menos, escolha o motivo. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
+      '<div class="tools"><button class="btn" id="tudo">' + (para ? 'Ficou tudo certo' : 'Voltou tudo certo') + '</button><button class="btn" id="qr">📷 Ler QR</button></div><div style="height:6px"></div>' +
       agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
         var it = item(l.item_id) || { nome: l.nome }, id = l.item_id, cons = consumo(id), eq = ehEq(it);
         return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div><div class="qty">Saiu <b>' + tot(l) + '</b></div></div>' +
           (eq ? '<input type="hidden" id="v-' + id + '"><div class="seg" style="flex:none;width:180px"><button type="button" class="ok" data-ev1="' + id + '">Voltou</button><button type="button" class="no" data-ev0="' + id + '">Não voltou</button></div>'
-          : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" max="' + tot(l) + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
+          : '<div><label class="hint" for="v-' + id + '">' + (para ? 'Ficou' : 'Voltou') + '</label><input type="number" min="0" max="' + tot(l) + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
           '<div data-j="' + id + '" hidden><label class="f" style="margin-top:0" for="m-' + id + '">Motivo</label><select id="m-' + id + '" data-mm="' + id + '">' +
           (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>' +
           '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea>' +
@@ -1597,7 +1582,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div></div>';
       }, '<div class="list">', '</div>'); }).join('') +
       blocoAluguel(e.aluguel, 'retorno') +
-      '<label class="f" for="cfr">Quem conferiu o retorno com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
+      '<label class="f" for="cfr">Quem conferiu ' + (para ? 'a contagem' : 'o retorno') + ' com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
       '<datalist id="cfl">' + nomesEquipe(e) + '</datalist><div id="erro" class="err" hidden></div>';
     function linha(id) { return e.linhas.filter(function (x) { return x.item_id === id; })[0]; }
     function upd(id) {
@@ -1653,14 +1638,14 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         return nomeIt(c.item) + ': voltou ' + novo + ' de ' + tot(l);
       });
     };
-    bar('<button class="btn primary" id="ok">Enviar retorno</button>');
+    bar('<button class="btn primary" id="ok">' + (para ? 'Enviar contagem' : 'Enviar retorno') + '</button>');
     $('ok').onclick = function () {
       var so = $('cfrso').checked, cf = so ? S.who.nome : $('cfr').value.trim();
       S.erro = !cf ? 'Informe quem conferiu o retorno com você ou marque que conferiu sozinho.' : '';
       if (S.erro) { mostrarErro(); return; }
       var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value, fotos: R.f[id] || [] }; });
       var al = lerAluguel(e.aluguel); if (al.erro) { S.erro = al.erro; mostrarErro(); return; }
-      fazer(this, api('registrarRetorno', { evento_id: e.id, linhas: linhas, conferido: cf, sozinho: so, aluguel: al.itens, aluguel_ok: al.ok }), function () { ls(chave, null); toast('Retorno registrado. Obrigado!'); voltar(); });
+      fazer(this, api('registrarRetorno', { evento_id: e.id, para: para ? para.id : '', linhas: linhas, conferido: cf, sozinho: so, aluguel: al.itens, aluguel_ok: al.ok }), function () { ls(chave, null); toast(para ? 'Contagem registrada. O material passou para ' + dataBR(para.data).slice(0, 5) + '.' : 'Retorno registrado. Obrigado!'); voltar(); });
     };
   };
 
