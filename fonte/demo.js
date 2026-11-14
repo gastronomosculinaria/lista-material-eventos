@@ -46,6 +46,8 @@ var DEMO_DB = (function () {
       return (h >>> 0).toString(16);
     },
     salvarFoto: function (dataUrl) { return dataUrl; },
+    // Na demonstração não há leitura de foto de verdade; os testes põem um texto em window.__FOLHA.
+    lerTexto: function () { return (typeof window !== 'undefined' && window.__FOLHA) || ''; },
     agenda: {
       salvar: function (ev) { return { id: ev.agenda_id || 'demo-' + ev.id, criado: !ev.agenda_id || ev.agenda_criado === 'sim' }; },
       remover: function () {},

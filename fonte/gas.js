@@ -141,6 +141,23 @@ function novoDb_() {
       var f = pastaFotos_().createFile(blob);
       f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       return 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w800';
+    },
+    // Leitura do texto de uma foto (OCR do Google Drive): sobe a imagem como Documento, lê o texto e apaga o documento.
+    lerTexto: function (dataUrl) {
+      var m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(dataUrl || '');
+      if (!m) return '';
+      var tk = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, lim = 'gm' + Date.now();
+      var corpo = '--' + lim + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'Leitura da folha de aluguel (pode apagar)', mimeType: 'application/vnd.google-apps.document' }) +
+        '\r\n--' + lim + '\r\nContent-Type: ' + m[1] + '\r\nContent-Transfer-Encoding: base64\r\n\r\n' + m[2] + '\r\n--' + lim + '--';
+      var r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=pt&fields=id',
+        { method: 'post', contentType: 'multipart/related; boundary=' + lim, payload: corpo, headers: tk, muteHttpExceptions: true });
+      if (r.getResponseCode() >= 300) throw new Error(r.getResponseCode() === 403 ? 'a leitura de fotos precisa ser ligada uma vez no Apps Script (Serviços > Drive API)' : 'o Google não leu a foto (' + r.getResponseCode() + ')');
+      var id = JSON.parse(r.getContentText()).id;
+      try {
+        var t = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: tk, muteHttpExceptions: true });
+        if (t.getResponseCode() >= 300) throw new Error('o Google não devolveu o texto da foto (' + t.getResponseCode() + ')');
+        return t.getContentText();
+      } finally { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} }
     }
   };
 }

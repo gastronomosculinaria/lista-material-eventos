@@ -264,6 +264,34 @@ var CORE = (function () {
   }
   // Material alugado (fora do nosso estoque): fotos da folha do fornecedor + itens, com conferência na chegada e no retorno.
   function aluguelDe(ev) { var a = json(ev && ev.aluguel, null); return a && typeof a === 'object' ? { fornecedor: a.fornecedor || '', obs: a.obs || '', fotos: fotosAluguel(a.fotos), itens: Array.isArray(a.itens) ? a.itens : [], por: a.por || '', em: a.em || '', chegada_ok: a.chegada_ok || '', retorno_ok: a.retorno_ok || '' } : null; }
+  // Lê o texto da foto da folha do fornecedor (OCR) e tira o nome da locadora e os itens com quantidade.
+  // É uma leitura aproximada: o estoque sempre confere e corrige antes de salvar.
+  function lerFolha(txt) {
+    var fora = /total|valor|desconto|frete|entrega|retirada|devolu|cnpj|cpf|insc|telefone|\btel\b|fone|whats|\bcep\b|\bpix\b|e-?mail|@|www\.|http|\bdata\b|pedido|or[çc]amento|contrato|cliente|endere[çc]o|\brua\b|\bav\.|avenida|bairro|assinatura|\bobs\b|pagamento|vencimento|\d{1,2}\/\d{1,2}(\/\d{2,4})?|\(\d{2}\)\s*\d{4}/i;
+    var ls = String(txt || '').replace(/\r/g, '').split('\n').map(function (l) { return l.replace(/[|_]+/g, ' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+    function letras(t) { return (t.match(/[A-Za-zÀ-ÿ]/g) || []).length; }
+    function limpa(n) { return n.replace(/\s*(R\$\s*)?\d{1,3}(\.\d{3})*,\d{2}.*$/, '').replace(/^[-–:.xX)\s]+|[-–:.\s]+$/g, '').trim(); }
+    function item(l) {
+      if (fora.test(l)) return null;
+      var m = /^(\d{1,4})\s*(?:x|un|und|unid|unidades?|p[çc]s?|pe[çc]as?)?\.?\s*[-–:)]?\s+(.+)$/i.exec(l), q, n;
+      if (m) { q = +m[1]; n = limpa(m[2]); }
+      else {
+        var s = limpa(l); m = /^(.+?)\s*[-–:xX]?\s*(\d{1,4})\s*(?:un|und|unid|unidades?|p[çc]s?|pe[çc]as?)?\.?$/i.exec(s);
+        if (!m) return null; q = +m[2]; n = limpa(m[1]);
+      }
+      return q > 0 && letras(n) >= 3 ? { nome: n.charAt(0).toUpperCase() + n.slice(1), qtd: String(q) } : null;
+    }
+    var itens = [], usados = {};
+    for (var i = 0; i < ls.length; i++) {
+      var it = item(ls[i]);
+      // tabela lida em colunas: a quantidade numa linha e o nome na seguinte
+      if (!it && /^\d{1,4}$/.test(ls[i]) && ls[i + 1] && !fora.test(ls[i + 1]) && !/\d/.test(ls[i + 1]) && letras(ls[i + 1]) >= 3) { it = { nome: limpa(ls[i + 1]), qtd: String(+ls[i]) }; usados[i + 1] = 1; i++; }
+      if (it && +it.qtd > 0) { itens.push(it); usados[i] = 1; }
+    }
+    var cab = ls.slice(0, 8).filter(function (l, k) { return !usados[k] && !fora.test(l) && letras(l) >= 4 && letras(l) >= l.replace(/\s/g, '').length * 0.6; });
+    var forn = cab.filter(function (l) { return /loca|festa|evento|alugu|decor|buffet/i.test(l); })[0] || cab[0] || '';
+    return { fornecedor: texto(forn, 120), itens: itens.slice(0, 80) };
+  }
   function fotosAluguel(l) {
     return (Array.isArray(l) ? l : []).filter(function (u) {
       return typeof u === 'string' && (/^https:\/\/drive\.google\.com\/[\w?=&\/.-]+$/.test(u) || /^data:image\/jpeg;base64,[\w+\/=]+$/.test(u));
@@ -1142,7 +1170,10 @@ var CORE = (function () {
       var d = String(p.foto || '');
       if (!/^data:image\/[a-z]+;base64,/.test(d)) falha('Foto inválida.');
       if (d.length > 2500000) falha('Foto grande demais. Tente de novo.');
-      return { url: db.salvarFoto(d, 'Aluguel ' + ev.nome + ' ' + (ev.data || '')) };
+      var url = db.salvarFoto(d, 'Aluguel ' + ev.nome + ' ' + (ev.data || '')), lido = null;
+      // A foto já monta a lista: se a leitura falhar, a foto fica salva e os itens podem ser digitados.
+      if (db.lerTexto) { try { lido = lerFolha(db.lerTexto(d)); } catch (e) { lido = { erro: String(e && e.message || e).slice(0, 200) }; } }
+      return { url: url, lido: lido };
     },
     salvarAluguel: function (db, p, s, quem) {
       if (!(s && (s.estoque || s.separa))) falha('Só o estoque registra o material alugado.');

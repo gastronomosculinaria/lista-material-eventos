@@ -512,7 +512,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.6 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.7 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1762,7 +1762,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         '<label class="f" for="afo">Fornecedor</label><input type="text" id="afo" value="' + esc(a.fornecedor) + '" placeholder="Nome da locadora">' +
         '<h3 style="margin:18px 0 6px">Foto da folha</h3>' + (a.fotos.length ? '<div class="fts">' + a.fotos.map(function (u, i) { return '<span style="position:relative;display:inline-block"><a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Folha ' + (i + 1) + '"></a><button type="button" class="chip" data-rf="' + i + '" style="position:absolute;top:-6px;right:-6px;padding:2px 7px" aria-label="Tirar foto">×</button></span>'; }).join('') + '</div>' : '<p class="hint">Nenhuma foto ainda.</p>') +
         '<label class="btn" for="afi" id="afl" style="margin-top:8px">📷 Foto da folha</label><input type="file" accept="image/*" id="afi" hidden>' +
-        '<h3 style="margin:18px 0 6px">Itens alugados</h3><p class="hint" style="margin:0 0 6px">Opcional: digitando os itens, a equipe conta cada um na chegada e no retorno. Sem itens, ela confere pela foto.</p>' +
+        '<h3 style="margin:18px 0 6px">Itens alugados</h3>' + (S.p.lido ? '<div class="panel" id="alido" style="margin:0 0 8px">' + esc(S.p.lido) + '</div>' : '') + '<p class="hint" style="margin:0 0 6px">A foto da folha já monta esta lista. Confira e corrija; com os itens, a equipe conta cada um na chegada e no retorno. Sem itens, ela confere pela foto.</p>' +
         '<div id="ail">' + a.itens.map(function (x, i) { return '<div class="row" style="gap:8px;margin-bottom:6px"><input type="text" data-an="' + i + '" value="' + esc(x.nome) + '" placeholder="Item" style="flex:1"><input type="number" min="0" inputmode="numeric" data-aq="' + i + '" value="' + esc(x.qtd) + '" style="width:80px;text-align:center"><button type="button" class="btn" data-ax="' + i + '" aria-label="Tirar item">×</button></div>'; }).join('') + '</div>' +
         '<button type="button" class="btn" id="aadd">+ Item</button>' +
         '<label class="f" for="aob">Observação</label><textarea id="aob">' + esc(a.obs) + '</textarea><div id="erro" class="err" hidden></div>';
@@ -1778,7 +1778,19 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         if (a.fotos.length >= 6) { toast('No máximo 6 fotos.'); return; }
         $('afl').textContent = 'Enviando foto…'; $('afl').style.pointerEvents = 'none'; S.erro = ''; mostrarErro();
         comprimir(f, IS_GAS || REMOTO ? 1600 : 600).then(function (d) { return api('fotoAluguel', { id: e.id, foto: d }); })
-          .then(function (r) { a.fotos.push(r.url); desenhar(); })
+          .then(function (r) {
+            a.fotos.push(r.url);
+            var l = r.lido, n = 0;
+            if (l && !l.erro) {
+              if (l.fornecedor && !a.fornecedor.trim()) a.fornecedor = l.fornecedor;
+              var ja = {}; a.itens = a.itens.filter(function (x) { return String(x.nome || '').trim(); }); a.itens.forEach(function (x) { ja[sem(x.nome)] = 1; });
+              (l.itens || []).forEach(function (x) { if (!ja[sem(x.nome)]) { ja[sem(x.nome)] = 1; a.itens.push({ nome: x.nome, qtd: x.qtd }); n++; } });
+            }
+            S.p.lido = l && l.erro ? 'Foto salva, mas não deu para ler a folha: ' + l.erro + '. Digite os itens abaixo.'
+              : n ? 'Li ' + n + (n === 1 ? ' item' : ' itens') + ' da folha. Confira os nomes e as quantidades com a foto e corrija o que estiver errado antes de salvar.'
+              : l ? 'Foto salva. Não consegui ler itens nesta folha (letra de mão ou foto escura costumam atrapalhar). Digite os itens abaixo.' : '';
+            desenhar();
+          })
           .catch(function (er) { S.erro = er.message; mostrarErro(); $('afl').textContent = '📷 Foto da folha'; $('afl').style.pointerEvents = ''; });
       };
     }
