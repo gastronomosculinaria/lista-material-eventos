@@ -545,7 +545,7 @@ var CORE = (function () {
               qtd_chegada: l.qtd_chegada === '' || l.qtd_chegada == null ? null : num(l.qtd_chegada), extra_por: l.extra_por || '',
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
               justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []),
-              parcial: e.status === 'em_evento' ? json(l.parcial, null) : null };
+              parcial: e.status === 'em_evento' ? json(l.parcial, null) : null, parcial_chegada: e.status === 'em_evento' ? json(l.parcial_chegada, null) : null };
           }) };
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
@@ -1142,7 +1142,7 @@ var CORE = (function () {
         if (!e || e.qtd === '' || e.qtd == null) falha('Informe quantos chegaram de "' + l.item_nome + '".');
         var q = Math.max(0, Math.round(num(e.qtd)));
         if (q !== totalLinha(l)) difs.push(l.item_nome + ': chegaram ' + q + ' de ' + totalLinha(l));
-        db.update('evento_itens', l.id, { qtd_chegada: String(q) });
+        db.update('evento_itens', l.id, { qtd_chegada: String(q), parcial_chegada: '' });
       });
       var alu = aluguelDe(ev);
       if (alu && (alu.itens.length || alu.fotos.length)) {
@@ -1289,6 +1289,40 @@ var CORE = (function () {
       if (d.length > 1500000) falha('Foto grande demais. Tente de novo.');
       var l = db.all('evento_itens').filter(function (x) { return x.evento_id === ev.id && x.item_id === p.item_id; })[0];
       return { url: db.salvarFoto(d, 'Retorno ' + ev.nome + ' ' + (ev.data || '') + ' - ' + (l ? l.item_nome : 'item')) };
+    },
+
+    // Evento cujo material já fica no local (ex.: degustação no Quartinho do buffet no Verde Vila): sem separação nem retorno (2026-11-15).
+    materialNoLocal: function (db, p, s, quem) {
+      if (!s || !(s.papel === 'master' || s.estoque)) falha('Só o Master ou o estoque marca que o material já fica no local.');
+      var ev = porId(db.all('eventos'), p.id);
+      if (!ev) falha('Evento não encontrado.');
+      if (ev.status !== 'montando') falha('Este evento já tem material separado. Use o retorno normal.');
+      if (db.all('evento_itens').some(function (l) { return l.evento_id === ev.id && num(l.qtd_saida) > 0; })) falha('Este evento tem lista de material. Apague a lista antes ou separe normalmente.');
+      var onde = texto(p.onde, 120);
+      db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: 'Material fica no local' + (onde ? ': ' + onde : '') + ' (sem separação)', conferido_retorno: '' });
+      log(db, quem, 'Marcou que o material fica no local', ev.nome + (onde ? ' — ' + onde : ''));
+      sincAgenda(db, ev.id, quem);
+      return true;
+    },
+
+    // Chegada: cada pessoa anota o que já contou (grava na hora; o envio final continua sendo conferirChegada).
+    anotarChegada: function (db, p, s, quem, conv) {
+      var ev = porId(db.all('eventos'), p.evento_id);
+      if (!ev) falha('Evento não encontrado.');
+      naEquipeDoEvento(s, conv, ev);
+      if (ev.status !== 'em_evento') return { fechado: true };
+      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 80), feitos = [];
+      (p.itens || []).forEach(function (x) {
+        var l = linhas.filter(function (y) { return y.item_id === x.item_id; })[0];
+        if (!l) return;
+        var ant = json(l.parcial_chegada, null);
+        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) return;
+        var vazio = x.qtd === '' || x.qtd == null;
+        db.update('evento_itens', l.id, { parcial_chegada: vazio ? '' : JSON.stringify({ q: Math.max(0, Math.round(num(x.qtd))), por: por, em: texto(x.em, 30) || agora() }) });
+        feitos.push((vazio ? 'apagou ' : num(x.qtd) + '/' + totalLinha(l) + ' ') + l.item_nome);
+      });
+      if (feitos.length) log(db, quem, 'Anotou a chegada do material', ev.nome + ': ' + feitos.join(', '));
+      return { anotados: feitos.length };
     },
 
     // Cada pessoa anota as quantidades que já contou, em horários diferentes (2026-11-15). Não encerra o evento.
@@ -1545,7 +1579,7 @@ var CORE = (function () {
       'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga', 'serie',
       'lista_estoque', 'chegada_por', 'chegada_em', 'chegada_status', 'chegada_obs', 'chegada_revisao', 'aluguel', 'tentativas'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por', 'fotos',
-      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada', 'parcial'],
+      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada', 'parcial', 'parcial_chegada'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],

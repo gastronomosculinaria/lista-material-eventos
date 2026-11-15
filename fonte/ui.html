@@ -116,6 +116,18 @@ textarea { min-height: 80px }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
 .ret { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 10px }
 .ret.short { border-color: var(--bad) }
+.cheg { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; margin-bottom: 8px }
+.cheg th { font-size: 12px; font-weight: 600; color: var(--muted, inherit); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line) }
+.cheg td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle }
+.cheg tr:last-child td { border-bottom: 0 }
+.cheg .n { text-align: center; width: 1%; white-space: nowrap }
+.cheg td.n b { font-size: 17px }
+.cheg .chq { display: flex; gap: 6px; align-items: center }
+.cheg .chq input { width: 64px; text-align: center }
+.cheg .chq .btn { min-width: 40px; padding-left: 8px; padding-right: 8px }
+.cheg tr.short td { background: color-mix(in srgb, var(--bad) 10%, transparent) }
+.cheg tr.short input { border-color: var(--bad) }
+.cheg tr.feito td.n b { color: var(--ok, inherit) }
 .ret .top { display: flex; gap: 12px; align-items: center }
 .ret .top .ph { width: 56px; height: 56px; border-radius: 10px; font-size: 18px; flex: none }
 .fts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px }
@@ -249,6 +261,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   function fotosFalta(l) { return l && l.fotos && l.fotos.length ? '<div class="fts">' + l.fotos.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Foto da justificativa" loading="lazy"></a>'; }).join('') + '</div>' : ''; }
   function dataBR(d) { if (!d) return 'sem data'; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; }
   function quando(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  // Eventos aparecem como "14/11/2026 - Casamento Alice e Carlos" (pedido do usuário, 2026-11-15); as listas de eventos ficam em ordem de data.
+  function nomeEv(e) { return e ? (e.data ? dataBR(e.data) + ' - ' : '') + (e.nome || e.titulo || '(sem título)') : ''; }
   function nomeIt(i) { return i ? i.nome + (i.numero ? ' nº ' + i.numero : '') : ''; }
   function cmpNome(a, b) { return nomeIt(a).localeCompare(nomeIt(b), 'pt', { numeric: true }); }
   function ehEq(i) { return i && i.tipo === 'equipamento'; }
@@ -330,7 +344,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // O que foi para o evento: lista fechada + extras enviados depois.
   function tot(l) { return l.qtd_saida + (l.qtd_extra || 0); }
   function ficouNoLocal(ev) { return ev.status === 'concluido' && /^Ficou no local/.test(ev.retorno_por || ''); }
-  function statusTxt(ev) { return ficouNoLocal(ev) ? 'Ficou no local' : STATUS[ev.status] || ''; }
+  function materialNoLocal(ev) { return ev.status === 'concluido' && /^Material fica no local/.test(ev.retorno_por || ''); }
+  function statusTxt(ev) { return ficouNoLocal(ev) ? 'Ficou no local' : materialNoLocal(ev) ? 'Material no local' : STATUS[ev.status] || ''; }
   function podeLista(ev) { var s = sess(); return s ? !!(s.estoque || s.separa) : !!(souPrestador(ev) && S.data.convite.coord && !ev.lista_estoque); }
   function podeReabrir(ev) { var s = sess(); return s && (s.estoque || s.separa) ? true : !ev.lista_estoque && (s ? !!s.escala : podeLista(ev)); }
   // "Ana Paula de Souza Lima" -> "Ana Lima"
@@ -507,7 +522,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!s) {
       var meus = d.eventos.filter(function (e) { return !e.outro; });
       $('app').innerHTML = h + '<h2>Seu evento</h2>' + (meus.length ? '<div class="list">' + meus.map(function (e) {
-        return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div><span class="pill ' + e.status + '">' + statusTxt(e) + '</span></button>';
+        return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(nomeEv(e)) + '</div><div class="hint">' + (e.local ? esc(e.local) : '') + '</div></div><span class="pill ' + e.status + '">' + statusTxt(e) + '</span></button>';
       }).join('') + '</div>' : '<div class="empty">Este evento não está mais disponível.</div>') +
         '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p>';
       document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
@@ -527,7 +542,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 28.1 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 28.2 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -535,7 +550,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var pe = s.escala ? escalasPend() : [], nc = s.escala ? (d.equipe || []).filter(function (x) { return x.novo || x.pendente; }).length : 0;
     if (nc) h = '<button class="li" id="t-nc" style="margin-bottom:14px"><div class="mid"><div class="nm">' + nc + (nc > 1 ? ' cadastros' : ' cadastro') + ' pelo link para aprovar</div><div class="hint">Novos ou atualizados. Só valem depois de aprovados.</div></div><span class="btn">Ver</span></button>' + h;
     if (pe.length) h = '<button class="li" id="t-es" style="margin-bottom:14px"><div class="mid"><div class="nm">' + pe.length + (pe.length > 1 ? ' escalas' : ' escala') + ' para confirmar</div><div class="hint">Próximo prazo: terça ' + dataBR(pe[0].prazo_escala) + '</div></div><span class="btn">Ver</span></button>' + h;
-    (d.chegadas || []).forEach(function (id) { var y = evento(id); if (y) h = '<button class="li" data-chq="' + y.id + '" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">Conferência de chegada com diferença</div><div class="hint">' + esc(y.nome) + ' · ' + dataBR(y.data) + '</div></div><span class="btn">Ver</span></button>' + h; });
+    (d.chegadas || []).forEach(function (id) { var y = evento(id); if (y) h = '<button class="li" data-chq="' + y.id + '" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">Conferência de chegada com diferença</div><div class="hint">' + esc(nomeEv(y)) + '</div></div><span class="btn">Ver</span></button>' + h; });
     if (np) h = '<button class="li" id="t-pd" style="border-color:var(--bad);margin-bottom:14px"><div class="mid"><div class="nm" style="color:var(--bad)">⚠ ' + np + (np > 1 ? ' perdas' : ' perda') + ' para confirmar</div><div class="hint">Material que voltou a menos de eventos</div></div><span class="btn">Ver</span></button>' + h;
     $('app').innerHTML = h;
     if ($('t-inv')) $('t-inv').onclick = function () { ir('inventario'); };
@@ -563,11 +578,11 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var ini = hoje(), fim = maisDias(dias), s = sess();
     var dentro = function (d) { d = String(d || '').slice(0, 10); return d >= ini && d <= fim; };
     var l = S.data.eventos.filter(function (e) { return dentro(e.data); }).map(function (e) {
-      return { titulo: e.nome, data: String(e.data).slice(0, 10), hora_inicio: e.hora_inicio, local: e.local, ev: e };
+      return { titulo: nomeEv(e), data: String(e.data).slice(0, 10), hora_inicio: e.hora_inicio, local: e.local, ev: e };
     });
     var ag = s && (s.estoque || s.escala) && S.data.agenda ? api('listarAgenda').catch(function () { return []; }) : Promise.resolve([]);
     return ag.then(function (a) {
-      a.forEach(function (c) { if (!c.evento_id && dentro(c.data)) l.push({ titulo: c.titulo, data: String(c.data).slice(0, 10), hora_inicio: c.hora_inicio, local: c.local, c: c }); });
+      a.forEach(function (c) { if (!c.evento_id && dentro(c.data)) l.push({ titulo: nomeEv({ data: c.data, nome: c.titulo }), data: String(c.data).slice(0, 10), hora_inicio: c.hora_inicio, local: c.local, c: c }); });
       return l.sort(function (x, y) { return x.data.localeCompare(y.data) || String(x.hora_inicio || '').localeCompare(String(y.hora_inicio || '')); });
     });
   }
@@ -576,8 +591,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     return proximos(dias).then(function (l) {
       if (!$(alvo)) return;
       $(alvo).innerHTML = l.length ? '<div class="list">' + l.map(function (x, k) {
-        return '<button class="li" data-px' + alvo + '="' + k + '"><div class="mid"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(x.data) +
-          (x.hora_inicio ? ' · ' + esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div></div>' +
+        return '<button class="li" data-px' + alvo + '="' + k + '"><div class="mid"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' +
+          (x.hora_inicio ? esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div></div>' +
           (x.ev ? '<span class="pill ' + x.ev.status + '">' + statusTxt(x.ev) + '</span>' : '<span class="pill montando">' + (s && s.estoque ? 'Criar lista' : 'Abrir') + '</span>') + '</button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum evento nos próximos ' + dias + ' dias.</div>';
       document.querySelectorAll('[data-px' + alvo + ']').forEach(function (b) {
@@ -1036,7 +1051,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     $('app').innerHTML = evs.length ? '<div class="list">' + evs.map(function (e) {
       var pecas = e.linhas.reduce(function (t, l) { return t + tot(l); }, 0);
       var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < tot(l); });
-      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
+      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(nomeEv(e)) + '</div><div class="hint">' + (e.local ? esc(e.local) + ' · ' : '') + pecas + ' peças</div></div>' +
         '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Retornado · com faltas' : statusTxt(e)) + '</span></button>';
     }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
     if (s && (s.estoque || s.escala) && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda não abertos aqui.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
@@ -1047,7 +1062,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (!$('agl')) return;
       l = l.filter(function (c) { return !c.evento_id; });
       $('agl').innerHTML = l.length ? '<div class="list">' + l.map(function (c, k) {
-        return '<button class="li" data-ak="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
+        return '<button class="li" data-ak="' + k + '"><div class="mid"><div class="nm">' + esc(nomeEv({ data: c.data, nome: c.titulo })) + '</div><div class="hint">' + dataBR(c.data) +
           (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div><span class="pill montando">' + (s.estoque ? 'Criar lista' : 'Abrir') + '</span></button>';
       }).join('') + '</div>' : '<div class="empty">Nenhum compromisso novo na agenda nos próximos 90 dias.</div>';
       document.querySelectorAll('[data-ak]').forEach(function (b) { b.onclick = function () { daAgenda(l[+b.dataset.ak], b); }; });
@@ -1068,7 +1083,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     api('listarAgenda').then(function (l) {
       $('app').innerHTML = '<p class="sub">Compromissos dos próximos 90 dias. Escolha um para montar a lista de material.</p>' +
         (l.length ? '<div class="list">' + l.map(function (c, k) {
-          return '<button class="li" data-k="' + k + '"><div class="mid"><div class="nm">' + esc(c.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(c.data) +
+          return '<button class="li" data-k="' + k + '"><div class="mid"><div class="nm">' + esc(nomeEv({ data: c.data, nome: c.titulo })) + '</div><div class="hint">' + dataBR(c.data) +
             (c.hora_inicio ? ' · ' + esc(c.hora_inicio) : '') + (c.local ? ' · ' + esc(c.local) : '') + '</div></div>' +
             (c.evento_id ? '<span class="pill concluido">Já tem lista</span>' : '<span class="pill montando">Criar lista</span>') + '</button>';
         }).join('') + '</div>' : '<div class="empty">Nenhum compromisso nos próximos 90 dias.</div>');
@@ -1152,7 +1167,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     S.p.prest = prest;
     header('Escalar equipe', true);
     $('bk').onclick = function () { if (!S.p.mudou || confirm('Sair sem salvar a equipe?')) voltar(); };
-    $('app').innerHTML = '<div class="panel" style="margin-bottom:12px"><b>' + esc(e.nome) + '</b><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div>' +
+    $('app').innerHTML = '<div class="panel" style="margin-bottom:12px"><b>' + esc(nomeEv(e)) + '</b><div class="hint">' + (e.local ? esc(e.local) : '') + '</div></div>' +
       ((e.tentativas || []).length ? '<div class="parec" style="margin:0 0 12px"><b>Tentaram abrir o link e não estão na equipe:</b><div class="chips" style="margin-top:6px">' +
         e.tentativas.map(function (x, k) { return '<button type="button" class="chip" data-tn="' + k + '">' + esc(x.nome) + '</button>'; }).join('') + '</div><p class="hint" style="margin:4px 0 0">Toque no nome para procurar no cadastro.</p></div>' : '') +
       '<label class="f" for="pq" style="margin-top:0">Incluir pessoa</label><div class="search"><input type="search" id="pq" placeholder="Digite o primeiro nome…" autocomplete="off" aria-label="Digite o primeiro nome"></div><div id="pr" class="list" style="margin-top:6px"></div>' +
@@ -1360,7 +1375,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.evento = function () {
     var e = evento(S.p.id), s = sess();
     if (!e) { inicio(); return; }
-    header(e.nome, true);
+    header(nomeEv(e), true);
     var podeRet = e.status === 'em_evento' && (s || souPrestador(e));
     var pecas = e.linhas.reduce(function (t, l) { return t + tot(l); }, 0);
     var perdas = { pecas: 0, valor: 0, semCusto: 0 };
@@ -1396,6 +1411,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       (e.status === 'concluido' ? '<dt>Retorno</dt><dd>' + esc(e.retorno_por) + (e.conferido_retorno ? '<br><span class="hint">Conferido por ' + esc(e.conferido_retorno) + '</span>' : '') + '<br><span class="hint">' + quando(e.concluido_em) + '</span></dd>' : '') +
       (s && perdas.pecas ? '<dt>Perdas</dt><dd><b style="color:var(--bad)">' + perdas.pecas + ' peças' + (perdas.valor ? ' · ' + moeda(perdas.valor) : '') + '</b>' +
         (perdas.semCusto ? '<br><span class="hint">' + perdas.semCusto + ' item(ns) sem custo de reposição cadastrado</span>' : '') + '</dd>' : '') + '</dl></div>';
+    var iniMat = h.length, soEsc = S.p.so === 'escala' && !!(s && s.escala);
     var naEquipe = !!(s || souPrestador(e)), alu = e.aluguel;
     if (e.chegada_status === 'diferenca' && s && (s.estoque || s.separa))
       h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Diferença na chegada para conferir</b><p class="hint" style="margin:6px 0">Veja em cada item “Chegou” em vermelho' + (e.chegada_obs ? '. Obs. da equipe: ' + esc(e.chegada_obs) : '') + '.</p>' +
@@ -1403,6 +1419,9 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (proxDia && hoje() >= proxDia.data) h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Hoje já é ' + dataBR(hoje()).slice(0, 5) + '.</b> Este é o dia ' + dataBR(e.data).slice(0, 5) +
       '. Faça a contagem do fim deste dia para passar o material para ' + dataBR(proxDia.data).slice(0, 5) + '; o retorno final é lançado no último dia.</div>';
     h += '<h2>Material</h2>';
+    // Evento cujo material já fica no local (ex.: degustação no Quartinho do buffet): sem separação e sem retorno.
+    if (e.status === 'montando' && s && (s.papel === 'master' || s.estoque) && !diaAnt && !e.linhas.some(function (l) { return l.qtd_saida > 0; }))
+      h += '<div class="tools"><button class="btn" id="mnl">Material já fica no local (sem separação)</button></div>';
     if (e.status === 'em_evento' && naEquipe) h += '<div class="tools">' + (/^Continuou no local/.test(e.conferido_saida || '') ? '' : '<button class="btn' + (e.chegada_status ? '' : ' primary') + '" id="chg">' + (e.chegada_status ? 'Refazer conferência da chegada' : 'Conferir chegada') + '</button>') + '<button class="btn" id="xtr">+ Adicionar extra</button></div>';
     if (temAluguel(alu)) h += '<div class="panel" style="margin:10px 0"><b>Material alugado</b>' + (alu.fornecedor ? ' · ' + esc(alu.fornecedor) : '') + fotosAlu(alu) +
       (alu.itens.length ? '<ul style="margin:6px 0 0;padding-left:20px">' + alu.itens.map(function (x) { return '<li>' + esc(x.qtd) + ' × ' + esc(x.nome) + (x.chegada != null ? ' · chegou ' + esc(x.chegada) : '') + (x.retorno != null ? ' · voltou ' + esc(x.retorno) : '') + '</li>'; }).join('') + '</ul>' : '') +
@@ -1421,6 +1440,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         '<div class="qty">' + (l.qtd_saida ? 'Saiu <b>' + l.qtd_saida + '</b>' : '') + (l.qtd_extra ? (l.qtd_saida ? ' · ' : '') + '<b>+' + l.qtd_extra + ' extra</b>' : '') +
         (ch != null ? ' · Chegou <b' + (chDif ? ' style="color:var(--bad)"' : '') + '>' + ch + '</b>' : '') + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (l.qtd_extra && l.extra_por ? '<div class="hint">Extra pedido por ' + esc(l.extra_por) + '</div>' : '') +
+        (ch == null && l.parcial_chegada ? '<div class="hint anot">Chegada já contada: ' + esc(l.parcial_chegada.q) + ' (anotado por ' + esc(l.parcial_chegada.por) + ', ainda não enviado)</div>' : '') +
         (!ret && l.parcial ? '<div class="hint anot">Já contado: ' + esc(l.parcial.q) + ' (anotado por ' + esc(l.parcial.por) + ', ainda não enviado)</div>' : '') +
         (ret && l.qtd_retorno > tot(l) ? '<div class="hint" style="color:var(--terra)">Voltaram ' + (l.qtd_retorno - tot(l)) + ' a mais do que saíram' + (l.justificativa ? ': ' + esc(l.justificativa) : '') + '. Confira a quantidade que saiu.</div>' : '') +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (tot(l) - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
@@ -1433,14 +1453,27 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var pc = g[1].reduce(function (t, l) { return t + tot(l); }, 0);
       return cabGrupo(g[0], g[1].length + ' itens · ' + pc + ' peças') + porSub(g[0], g[1], itemDaLinha, linhaEv, '<div class="list">', '</div>');
     }).join('');
-    if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px">' + (s.papel === 'master' ? '<button class="btn" id="ed">Editar dados do evento</button>' : '') +
+    // Confirmar escala: só a equipe, sem a lista de material (pedido do usuário, 2026-11-15).
+    if (soEsc) {
+      var eqs = agrupar(e.prestadores, function (p) { return p.secao || 'Equipe'; }).sort(function (a, b) { var x = SETORES.indexOf(a[0]), y = SETORES.indexOf(b[0]); return (x < 0 ? 9 : x) - (y < 0 ? 9 : y); });
+      h = h.slice(0, iniMat) + '<h2>Equipe (' + e.prestadores.length + ')</h2>' + (e.prestadores.length ? eqs.map(function (g) {
+        return cabGrupo(g[0], g[1].length) + '<div class="list">' + g[1].slice().sort(function (a, b) { return sem(apelido(a)).localeCompare(sem(apelido(b))); }).map(function (p) {
+          return '<div class="li static" style="padding:8px 12px"><div class="mid"><div class="nm">' + esc(apelido(p)) + (p.coord ? ' <span class="pill em_evento">Coordenador</span>' : '') + '</div>' +
+            (funcaoDe(p.funcao) ? '<div class="hint">' + esc(funcaoDe(p.funcao)) + '</div>' : '') + '</div></div>';
+        }).join('') + '</div>';
+      }).join('') : '<div class="empty">Ninguém marcado na escala.</div>') +
+        '<div class="tools" style="margin-top:12px"><button class="btn" id="vmat">Ver o evento completo (com material)</button></div>';
+    }
+    if (soEsc) h += '<div class="row" style="margin-top:22px">' + (e.prestadores.length ? (e.escala_status !== 'enviada' ? '<button class="btn primary" id="esc">Confirmar e enviar escala</button>' : s.papel === 'master' ? '<button class="btn" id="resc">Reabrir escala</button>' : '') : '') + '</div><div id="mx"></div>';
+    else if (s && (e.status !== 'concluido' || s.escala)) h += '<div class="row" style="margin-top:22px">' + (s.papel === 'master' ? '<button class="btn" id="ed">Editar dados do evento</button>' : '') +
       (s.escala && e.prestadores.length ? (e.escala_status !== 'enviada' ? '<button class="btn primary" id="esc">Confirmar e enviar escala</button>' : s.papel === 'master' ? '<button class="btn" id="resc">Reabrir escala</button>' : '') : '') +
       (!(s.estoque || s.escala || s.separa) || e.status === 'concluido' ? '' : e.status === 'montando' ? (s.papel === 'master' ? '<button class="btn danger" id="ex">Excluir evento</button>' : '') : podeReabrir(e) ? '<button class="btn" id="reab">Reabrir lista para correção</button>' : '') + '</div><div id="mx"></div>';
     else if (podeReabrir(e) && e.status === 'em_evento') h += '<div class="row" style="margin-top:22px"><button class="btn" id="reab">Reabrir lista para correção</button></div>';
     h += '<div id="erro" class="err" hidden></div>';
     $('app').innerHTML = h;
     var bpsa = diaAnt ? '<button class="btn primary" id="psa">Contar o que ficou de ' + dataBR(diaAnt.data).slice(0, 5) + '</button>' : '';
-    if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e)) bar(bpsa);
+    if (soEsc) bar('');
+    else if (e.status === 'montando' && diaAnt && !podeLista(e) && souPrestador(e)) bar(bpsa);
     else if (e.status === 'montando' && podeLista(e)) bar('<button class="btn" id="mt">Separar material</button>' + (e.linhas.length && !diaAnt ? '<button class="btn primary" id="cs">Fechar lista</button>' : '') + bpsa);
     else if (podeRet) bar((proxDia && podePassar ? '<button class="btn primary" id="psp">Contagem do fim do dia (fica para ' + dataBR(proxDia.data).slice(0, 5) + ')</button><button class="btn" id="rt">Registrar retorno</button>' : '<button class="btn primary" id="rt">Registrar retorno</button>'));
     else bar('');
@@ -1461,6 +1494,15 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       };
     });
     if ($('escalar')) $('escalar').onclick = function () { ir('escalar', { id: e.id }); };
+    if ($('vmat')) $('vmat').onclick = function () { S.p.so = ''; render(); };
+    if ($('mnl')) $('mnl').onclick = function () {
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Material já fica no local"><h2>Material já fica no local</h2>' +
+        '<p>Use quando o material deste evento já está guardado no próprio local e não sai do depósito (ex.: degustação com o material do Quartinho do buffet). O evento fica como concluído, sem separação e sem retorno.</p>' +
+        '<label class="f" for="mnlo">Onde fica o material</label><input type="text" id="mnlo" maxlength="120" value="' + esc(e.local ? 'Quartinho do buffet · ' + e.local : '') + '" placeholder="Ex.: Quartinho do buffet">' +
+        '<div id="erro" class="err" hidden></div><div class="row" style="margin-top:16px"><button class="btn primary" id="mnok">Confirmar</button><button class="btn" id="m-fc">Voltar</button></div></div></div>';
+      $('m-fc').onclick = fecharModal;
+      $('mnok').onclick = function () { fazer(this, api('materialNoLocal', { id: e.id, onde: $('mnlo').value }), function () { fecharModal(); toast('Evento marcado: material fica no local'); render(); }); };
+    };
     if ($('ttesc')) $('ttesc').onclick = function () { ir('escalar', { id: e.id }); };
     if ($('cgd')) $('cgd').onclick = function (x) {
       x.preventDefault();
@@ -1557,7 +1599,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   V.montar = function () {
     var e = evento(S.p.id);
-    header('Separar: ' + e.nome, true);
+    header('Separar: ' + nomeEv(e), true);
     var chave = 'rm-' + e.id;
     if (!S.p.ini) {
       var rasc = ls(chave);
@@ -1656,7 +1698,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 
   V.retorno = function () {
     var e = evento(S.p.id), para = S.p.para ? evento(S.p.para) : null;
-    header((para ? 'Contagem do fim do dia: ' : 'Retorno: ') + e.nome, true);
+    header((para ? 'Contagem do fim do dia: ' : 'Retorno: ') + nomeEv(e), true);
     var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' }); R.f = R.f || {}; R.t = R.t || {};
     // dia errado: o evento continua em outro dia (vários dias)
     var depois = !para && e.serie ? S.data.eventos.filter(function (y) { return y.id !== e.id && y.serie === e.serie && y.status === 'montando' && String(y.data) > String(e.data); })
@@ -1839,32 +1881,89 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // Conferência na chegada: a equipe confirma se o material separado pelo estoque chegou certo.
   V.chegada = function () {
     var e = evento(S.p.id);
-    header('Chegada: ' + e.nome, true);
-    var chave = 'rc-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {} });
+    if (!e) { inicio(); return; }
+    header('Chegada: ' + nomeEv(e), true);
+    var chave = 'rc-' + e.id, fk = 'c:' + e.id, R = S.p.r || (S.p.r = ls(chave) || {}); R.v = R.v || {}; R.t = R.t || {};
     function guardar() { ls(chave, R); }
-    $('app').innerHTML = '<p class="sub">Conte o que chegou no evento. Se algo veio diferente da lista, a diferença vai para o estoque conferir. A lista de saída não muda.</p>' +
-      '<div class="tools"><button class="btn" id="tudo">Chegou tudo certo</button></div><div style="height:6px"></div>' +
-      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
-        var it = item(l.item_id) || { nome: l.nome }, id = l.item_id;
-        return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div>' +
-          '<div class="qty">Saiu <b>' + tot(l) + '</b>' + (l.qtd_extra ? ' <span class="hint">(' + l.qtd_extra + ' extra)</span>' : '') + '</div></div>' +
-          '<div><label class="hint" for="v-' + id + '">Chegou</label><input type="number" min="0" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div></div></div>';
-      }, '<div class="list">', '</div>'); }).join('') + blocoAluguel(e.aluguel, 'chegada') +
+    function linha(id) { return e.linhas.filter(function (x) { return x.item_id === id; })[0]; }
+    function nomeL(l) { return nomeIt(item(l.item_id) || { nome: l.nome }); }
+    var cab = '<table class="cheg"><thead><tr><th>Item</th><th class="n">Separado</th><th class="n">Chegou</th></tr></thead><tbody>', fim = '</tbody></table>';
+    $('app').innerHTML = '<p class="sub">Ao lado de cada item está o que o estoque separou. Escreva quantos chegaram, ou toque em ✓ se chegou igual. Cada número fica gravado na hora, mesmo sem sinal, e outra pessoa pode continuar a contagem.</p>' +
+      '<div class="tools"><button class="btn" id="tudo">Chegou tudo certo</button><button class="btn" id="atz">↻ Ver o que os outros anotaram</button></div><div style="height:6px"></div>' +
+      agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) {
+        var ls_ = g[1].slice().sort(function (x, y) { return sem(nomeL(x)).localeCompare(sem(nomeL(y))); });
+        return cabGrupo(g[0], g[1].length) + porSub(g[0], ls_, itemDaLinha, function (l) {
+          var id = l.item_id;
+          return '<tr id="r-' + id + '"><td><div class="nm">' + esc(nomeL(l)) + '</div><div class="hint" id="st-' + id + '"></div></td>' +
+            '<td class="n"><b>' + tot(l) + '</b>' + (l.qtd_extra ? '<div class="hint">' + l.qtd_extra + ' extra</div>' : '') + '</td>' +
+            '<td class="n"><div class="chq"><input type="number" min="0" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" aria-label="Quantos chegaram de ' + esc(nomeL(l)) + '">' +
+            '<button type="button" class="btn" data-ok="' + id + '" aria-label="Chegou igual ao separado">✓</button></div></td></tr>';
+        }, cab, fim);
+      }).join('') + blocoAluguel(e.aluguel, 'chegada') +
       '<label class="f" for="cob">Observação (opcional)</label><textarea id="cob" placeholder="Ex.: 2 taças chegaram quebradas"></textarea><div id="erro" class="err" hidden></div>';
-    function upd(id) { var l = e.linhas.filter(function (x) { return x.item_id === id; })[0], v = $('v-' + id).value; $('r-' + id).classList.toggle('short', v !== '' && +v !== tot(l)); }
-    e.linhas.forEach(function (l) { var v = R.v[l.item_id] != null ? R.v[l.item_id] : (l.qtd_chegada != null ? l.qtd_chegada : ''); $('v-' + l.item_id).value = v; upd(l.item_id); });
-    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); }; });
-    $('tudo').onclick = function () { e.linhas.forEach(function (l) { $('v-' + l.item_id).value = tot(l); R.v[l.item_id] = tot(l); upd(l.item_id); }); guardar(); };
+    function upd(id) { var l = linha(id), v = $('v-' + id).value; $('r-' + id).classList.toggle('short', v !== '' && +v !== tot(l)); $('r-' + id).classList.toggle('feito', v !== '' && +v === tot(l)); }
+    var timers = {};
+    function hora(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    function status(id) {
+      var st = $('st-' + id); if (!st) return;
+      var f = fila().anot[fk], naFila = f && f.itens[id], l = linha(id), pc = l && l.parcial_chegada, meu = (S.anotados || {})[fk] && S.anotados[fk][id], v = $('v-' + id).value;
+      st.innerHTML = naFila ? '⏳ Guardado neste aparelho' : meu && R.t[id] && meu.em === R.t[id] ? '✓ Anotado por você'
+        : pc && String(v) === String(pc.q) ? '✓ ' + esc(pc.por) + ', ' + esc(hora(pc.em)) : '';
+    }
+    function mudou(id) {
+      R.t[id] = new Date().toISOString(); guardar();
+      clearTimeout(timers[id]);
+      timers[id] = setTimeout(function () {
+        anotar(e.id, '', id, { qtd: $('v-' + id).value, em: R.t[id] }, 'anotarChegada');
+        status(id); enviarFila().then(function () { status(id); });
+      }, 1200);
+      status(id);
+    }
+    function setV(id, v) { $('v-' + id).value = v; R.v[id] = String(v); guardar(); upd(id); mudou(id); }
+    // restaura: vale o que foi anotado por último (neste aparelho ou por outra pessoa)
+    function restaurar() {
+      e.linhas.forEach(function (l) {
+        var id = l.item_id, pc = l.parcial_chegada, local = R.v[id] != null && R.v[id] !== '';
+        if (pc && (!local || !R.t[id] || String(pc.em) > String(R.t[id]))) { R.v[id] = String(pc.q); R.t[id] = pc.em; $('v-' + id).value = pc.q; }
+        else $('v-' + id).value = local ? R.v[id] : (l.qtd_chegada != null ? l.qtd_chegada : '');
+        upd(id); status(id);
+      });
+      guardar();
+    }
+    restaurar();
+    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); mudou(x.dataset.v); }; });
+    document.querySelectorAll('[data-ok]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ok, tot(linha(b.dataset.ok))); }; });
+    $('tudo').onclick = function () { e.linhas.forEach(function (l) { if ($('v-' + l.item_id).value === '') setV(l.item_id, tot(l)); }); toast('Os itens ainda em branco ficaram iguais ao separado.'); };
+    $('atz').onclick = function () {
+      var b = this; b.disabled = true;
+      enviarFila().then(function () { return recarregar(); }).then(function () {
+        var n = evento(e.id); b.disabled = false;
+        if (!n || n.status !== 'em_evento') { toast('Este evento não está mais aguardando a chegada.'); voltar(); return; }
+        e.linhas = n.linhas; restaurar(); toast('Atualizado');
+      }).catch(function (er) { b.disabled = false; toast(er.rede ? 'Sem sinal agora. Suas anotações estão guardadas.' : er.message); });
+    };
     if (e.aluguel) e.aluguel.itens.forEach(function (x) { if ($('al-' + x.id) && x.chegada != null) $('al-' + x.id).value = x.chegada; });
     ligarAluguel(e.aluguel);
+    if (R.o) $('cob').value = R.o;
+    $('cob').oninput = function () { R.o = this.value; guardar(); };
     bar('<button class="btn primary" id="ok">Enviar conferência</button>');
     $('ok').onclick = function () {
-      var falta = e.linhas.filter(function (l) { return $('v-' + l.item_id).value === ''; })[0];
-      if (falta) { S.erro = 'Informe quantos chegaram de "' + nomeIt(item(falta.item_id) || { nome: falta.nome }) + '" (ou toque em “Chegou tudo certo”).'; mostrarErro(); return; }
+      var faltam = e.linhas.filter(function (l) { return $('v-' + l.item_id).value === ''; });
+      if (faltam.length) { S.erro = faltam.length + (faltam.length > 1 ? ' itens ainda sem contagem' : ' item ainda sem contagem') + ' (ex.: "' + nomeL(faltam[0]) + '"). O que já está aqui fica gravado: quem contar o resto anota depois, ou toque em ✓ se chegou igual.'; mostrarErro(); $('r-' + faltam[0].item_id).scrollIntoView({ block: 'center' }); return; }
       var al = lerAluguel(e.aluguel); if (al.erro) { S.erro = al.erro; mostrarErro(); return; }
-      var linhas = e.linhas.map(function (l) { return { item_id: l.item_id, qtd: $('v-' + l.item_id).value }; });
-      fazer(this, api('conferirChegada', { id: e.id, linhas: linhas, aluguel: al.itens, aluguel_ok: al.ok, obs: $('cob').value }), function (r) {
-        ls(chave, null); toast(r && r.difs ? 'Conferência enviada. As diferenças foram para o estoque.' : 'Conferência enviada: chegou tudo certo.'); voltar();
+      var linhas = e.linhas.map(function (l) { return { item_id: l.item_id, qtd: $('v-' + l.item_id).value }; }), btn = this;
+      var pd = { id: e.id, linhas: linhas, aluguel: al.itens, aluguel_ok: al.ok, obs: $('cob').value, token: S.token, who: S.who, rid: novoId() };
+      btn.disabled = true; S.erro = ''; mostrarErro();
+      api('conferirChegada', pd).then(function (r) {
+        var f = fila(); delete f.anot[fk]; ls('fila', f); avisoFila();
+        return recarregar().then(function () { ls(chave, null); toast(r && r.difs ? 'Conferência enviada. As diferenças foram para o estoque.' : 'Conferência enviada: chegou tudo certo.'); voltar(); });
+      }).catch(function (er) {
+        btn.disabled = false;
+        if (!er.rede) { S.erro = er.message; mostrarErro(); return; }
+        var f = fila(); f.fim[fk] = { acao: 'conferirChegada', p: pd }; ls('fila', f); avisoFila();
+        $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Sem sinal"><h2>Sem sinal agora</h2><p>A conferência ficou <b>guardada neste aparelho</b> e será enviada sozinha quando o celular tiver sinal ou Wi-Fi. Pode fechar esta tela.</p>' +
+          '<p class="hint">Não apague os dados do navegador e abra o app de novo quando tiver sinal.</p><div class="row" style="margin-top:16px"><button class="btn primary" id="m-fc">Entendi</button></div></div></div>';
+        $('m-fc').onclick = function () { fecharModal(); voltar(); };
       });
     };
   };
@@ -1872,7 +1971,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // Material extra: enviado ou pedido depois que a lista foi fechada. Não altera a lista de saída.
   V.extra = function () {
     var e = evento(S.p.id);
-    header('Extra: ' + e.nome, true);
+    header('Extra: ' + nomeEv(e), true);
     var qtd = S.p.qtd || (S.p.qtd = {});
     $('app').innerHTML = '<p class="sub">Material que foi enviado ou pedido depois do início do evento. Entra como extra; a lista fechada de saída continua igual.</p>' + busca() + '<div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
     function desenhar() {
@@ -1901,7 +2000,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   // Material alugado: o estoque fotografa a folha do fornecedor e, se quiser, digita os itens.
   V.aluguel = function () {
     var e = evento(S.p.id);
-    header('Alugado: ' + e.nome, true);
+    header('Alugado: ' + nomeEv(e), true);
     var a = S.p.a || (S.p.a = JSON.parse(JSON.stringify(e.aluguel || { fornecedor: '', obs: '', fotos: [], itens: [] })));
     function desenhar() {
       $('app').innerHTML = '<p class="sub">Material alugado fica à parte do nosso estoque. Tire foto da folha do fornecedor; a equipe confere na chegada e no retorno.</p>' +
@@ -2065,8 +2164,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (!$('esl')) return;
       $('esl').innerHTML = l.length ? '<div class="list">' + l.map(function (x, k) {
         var e = x.ev, n = e ? e.prestadores.length : 0, trava = e && e.escala_status === 'enviada' && s.papel !== 'master';
-        return '<div class="li static" style="flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 60%"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' + dataBR(x.data) +
-          (x.hora_inicio ? ' · ' + esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div>' +
+        return '<div class="li static" style="flex-wrap:wrap;gap:8px"><div class="mid" style="flex:1 1 60%"><div class="nm">' + esc(x.titulo || '(sem título)') + '</div><div class="hint">' +
+          (x.hora_inicio ? esc(x.hora_inicio) : '') + (x.local ? ' · ' + esc(x.local) : '') + '</div>' +
           '<div class="hint"' + (n ? '' : ' style="color:var(--terra)"') + '>' + (n ? 'Equipe: ' + n + (n > 1 ? ' pessoas' : ' pessoa') : 'Sem equipe ainda') + (e ? '' : ' · sem lista de material') + '</div></div>' +
           '<div style="display:flex;flex:0 0 auto;gap:6px;align-items:center">' + (n ? '<button type="button" class="btn" data-lk="' + k + '">Link</button>' : '') +
           (trava ? '<span class="pill concluido">Escala enviada</span>' : '<button type="button" class="btn primary" data-es="' + k + '">' + (n ? 'Alterar' : 'Escalar') + '</button>') + '</div></div>';
@@ -2084,13 +2183,13 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var pe = escalasPend(), env = S.data.eventos.filter(function (e) { return e.escala_status === 'enviada'; }).sort(function (a, b) { return String(b.data).localeCompare(a.data); }).slice(0, 20);
     function li(e, dir) {
       var atr = !dir && e.prazo_escala < hoje();
-      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + ' · ' + e.prestadores.length + ' pessoas</div></div>' +
+      return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(nomeEv(e)) + '</div><div class="hint">' + e.prestadores.length + ' pessoas</div></div>' +
         (dir ? '<span class="pill concluido">Enviada</span>' : '<span class="pill ' + (atr ? 'falta' : 'montando') + '">' + (atr ? 'Atrasada' : 'Até ' + dataBR(e.prazo_escala).slice(0, 5)) + '</span>') + '</button>';
     }
     $('app').innerHTML = '<p class="sub">Confirme quem trabalhou em cada evento até a terça-feira que fecha a semana. Depois de enviada, só o Master reabre.</p>' +
       '<h2>Para confirmar</h2>' + (pe.length ? '<div class="list">' + pe.map(function (e) { return li(e); }).join('') + '</div>' : '<div class="empty">Nenhuma escala pendente.</div>') +
       (env.length ? '<h2>Enviadas</h2><div class="list">' + env.map(function (e) { return li(e, 1); }).join('') + '</div>' : '');
-    document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
+    document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev, so: 'escala' }); }; });
   };
 
   V.perdas = function () {
@@ -2279,8 +2378,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   }
 
   // ---- Fila do aparelho: o que foi anotado sem sinal é enviado sozinho quando o sinal volta (2026-11-15) ----
-  // fila.anot[evento] = { para, token, who, itens: { item_id: {qtd, motivo, justificativa, fotos, em} } }
+  // fila.anot[evento] = { para, token, who, itens: { item_id: {qtd, motivo, justificativa, fotos, em} } }  (retorno)
+  // fila.anot['c:' + evento] = { ev, acao: 'anotarChegada', token, who, itens: { item_id: {qtd, em} } }       (chegada)
   // fila.fim[evento]  = pedido completo de registrarRetorno (retorno ou contagem do fim do dia)
+  // fila.fim['c:' + evento] = { acao: 'conferirChegada', p: pedido }
   function fila() { var f = ls('fila') || {}; f.anot = f.anot || {}; f.fim = f.fim || {}; return f; }
   function filaN() { var f = fila(), n = 0; Object.keys(f.anot).forEach(function (k) { n += Object.keys(f.anot[k].itens || {}).length; }); return n + Object.keys(f.fim).length; }
   function avisoFila() {
@@ -2288,35 +2389,38 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (!b) { b = document.createElement('div'); b.id = 'filaav'; b.className = 'rede'; var r = $('rede'); r.parentNode.insertBefore(b, r.nextSibling); }
     b.hidden = !n; b.textContent = n ? '⏳ ' + n + (n > 1 ? ' anotações guardadas' : ' anotação guardada') + ' neste aparelho. O app envia sozinho quando tiver sinal. Não apague os dados do navegador.' : '';
   }
-  function anotar(ev, para, id, dado) {
-    var f = fila(), a = f.anot[ev] || (f.anot[ev] = { para: para || '', itens: {} });
+  function anotar(ev, para, id, dado, acao) {
+    var f = fila(), k = acao ? 'c:' + ev : ev, a = f.anot[k] || (f.anot[k] = { para: para || '', itens: {} });
+    if (acao) { a.ev = ev; a.acao = acao; }
     a.token = S.token; a.who = S.who; a.itens[id] = dado; ls('fila', f); avisoFila();
   }
   var enviando = false;
   function enviarFila() {
     if (enviando) return Promise.resolve();
     var f = fila(), tarefas = [];
-    Object.keys(f.anot).forEach(function (ev) {
-      var a = f.anot[ev], ids = Object.keys(a.itens || {});
-      if (!ids.length) { delete f.anot[ev]; return; }
+    Object.keys(f.anot).forEach(function (k) {
+      var a = f.anot[k], ids = Object.keys(a.itens || {}), ev = a.ev || k;
+      if (!ids.length) { delete f.anot[k]; return; }
       tarefas.push(function () {
         var itens = ids.map(function (id) { return Object.assign({ item_id: id }, a.itens[id]); });
-        return api('anotarRetorno', { token: a.token, who: a.who, evento_id: ev, para: a.para, itens: itens }).then(function () {
-          var g = fila(), b = g.anot[ev];
-          if (b) { ids.forEach(function (id) { if (b.itens[id] && b.itens[id].em === a.itens[id].em) delete b.itens[id]; }); if (!Object.keys(b.itens).length) delete g.anot[ev]; }
-          ls('fila', g); (S.anotados = S.anotados || {})[ev] = Object.assign((S.anotados || {})[ev] || {}, a.itens);
-        }, function (e) { if (!e.rede) { var g = fila(); delete g.anot[ev]; ls('fila', g); toast('Não deu para anotar: ' + e.message); } });
+        return api(a.acao || 'anotarRetorno', { token: a.token, who: a.who, evento_id: ev, para: a.para, itens: itens }).then(function () {
+          var g = fila(), b = g.anot[k];
+          if (b) { ids.forEach(function (id) { if (b.itens[id] && b.itens[id].em === a.itens[id].em) delete b.itens[id]; }); if (!Object.keys(b.itens).length) delete g.anot[k]; }
+          ls('fila', g); (S.anotados = S.anotados || {})[k] = Object.assign((S.anotados || {})[k] || {}, a.itens);
+        }, function (e) { if (!e.rede) { var g = fila(); delete g.anot[k]; ls('fila', g); toast('Não deu para anotar: ' + e.message); } });
       });
     });
-    Object.keys(f.fim).forEach(function (ev) {
-      var pd = f.fim[ev];
+    Object.keys(f.fim).forEach(function (k) {
+      var x = f.fim[k], cheg = x.acao === 'conferirChegada', pd = cheg ? x.p : x, ev = cheg ? pd.id : k;
       tarefas.push(function () {
-        return api('registrarRetorno', pd).then(function () { var g = fila(); delete g.fim[ev]; ls('fila', g); ls('rr-' + ev, null); toast('Retorno guardado no aparelho foi enviado.'); },
-          function (e) {
+        return api(cheg ? 'conferirChegada' : 'registrarRetorno', pd).then(function () {
+          var g = fila(); delete g.fim[k]; if (cheg) delete g.anot[k]; ls('fila', g);
+          ls((cheg ? 'rc-' : 'rr-') + ev, null); toast(cheg ? 'A conferência da chegada guardada no aparelho foi enviada.' : 'Retorno guardado no aparelho foi enviado.');
+        }, function (e) {
             if (e.rede) return;
-            var g = fila(); delete g.fim[ev]; ls('fila', g);
-            if (/não está aguardando retorno/.test(e.message)) { ls('rr-' + ev, null); return; } // já tinha chegado antes
-            toast('O retorno guardado não foi aceito: ' + e.message + ' Abra o evento e envie de novo.');
+            var g = fila(); delete g.fim[k]; ls('fila', g);
+            if (!cheg && /não está aguardando retorno/.test(e.message)) { ls('rr-' + ev, null); return; } // já tinha chegado antes
+            toast((cheg ? 'A conferência da chegada guardada não foi aceita: ' : 'O retorno guardado não foi aceito: ') + e.message + ' Abra o evento e envie de novo.');
           });
       });
     });
