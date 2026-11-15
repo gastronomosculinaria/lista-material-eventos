@@ -161,6 +161,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
 .eqb { min-height: 44px; flex: none }
 .eqb.on, .seg button.ok.on { background: var(--ok-soft); color: var(--ok); border-color: var(--ok) }
 .seg button.no.on { background: var(--bad-soft); color: var(--bad); border-color: var(--bad) }
+.anot { margin-top: 6px; color: var(--ok) }
 .rede { position: sticky; top: calc(58px + env(safe-area-inset-top, 0px)); z-index: 4; background: var(--warn-soft); color: var(--warn); font-size: 13px; padding: 8px 16px; text-align: center }
 .cam { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 3 / 4; max-height: 56vh }
 .cam video { width: 100%; height: 100%; object-fit: cover; display: block }
@@ -526,7 +527,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 28.0 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 28.1 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -1399,6 +1400,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     if (e.chegada_status === 'diferenca' && s && (s.estoque || s.separa))
       h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Diferença na chegada para conferir</b><p class="hint" style="margin:6px 0">Veja em cada item “Chegou” em vermelho' + (e.chegada_obs ? '. Obs. da equipe: ' + esc(e.chegada_obs) : '') + '.</p>' +
         '<input type="text" id="rvn" placeholder="O que foi verificado (opcional)"><div class="row" style="margin-top:8px"><button class="btn primary" id="rvok">Marcar como conferido</button></div></div>';
+    if (proxDia && hoje() >= proxDia.data) h += '<div class="panel" style="border-color:var(--bad);margin-top:12px"><b style="color:var(--bad)">Hoje já é ' + dataBR(hoje()).slice(0, 5) + '.</b> Este é o dia ' + dataBR(e.data).slice(0, 5) +
+      '. Faça a contagem do fim deste dia para passar o material para ' + dataBR(proxDia.data).slice(0, 5) + '; o retorno final é lançado no último dia.</div>';
     h += '<h2>Material</h2>';
     if (e.status === 'em_evento' && naEquipe) h += '<div class="tools">' + (/^Continuou no local/.test(e.conferido_saida || '') ? '' : '<button class="btn' + (e.chegada_status ? '' : ' primary') + '" id="chg">' + (e.chegada_status ? 'Refazer conferência da chegada' : 'Conferir chegada') + '</button>') + '<button class="btn" id="xtr">+ Adicionar extra</button></div>';
     if (temAluguel(alu)) h += '<div class="panel" style="margin:10px 0"><b>Material alugado</b>' + (alu.fornecedor ? ' · ' + esc(alu.fornecedor) : '') + fotosAlu(alu) +
@@ -1418,6 +1421,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         '<div class="qty">' + (l.qtd_saida ? 'Saiu <b>' + l.qtd_saida + '</b>' : '') + (l.qtd_extra ? (l.qtd_saida ? ' · ' : '') + '<b>+' + l.qtd_extra + ' extra</b>' : '') +
         (ch != null ? ' · Chegou <b' + (chDif ? ' style="color:var(--bad)"' : '') + '>' + ch + '</b>' : '') + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (l.qtd_extra && l.extra_por ? '<div class="hint">Extra pedido por ' + esc(l.extra_por) + '</div>' : '') +
+        (!ret && l.parcial ? '<div class="hint anot">Já contado: ' + esc(l.parcial.q) + ' (anotado por ' + esc(l.parcial.por) + ', ainda não enviado)</div>' : '') +
         (ret && l.qtd_retorno > tot(l) ? '<div class="hint" style="color:var(--terra)">Voltaram ' + (l.qtd_retorno - tot(l)) + ' a mais do que saíram' + (l.justificativa ? ': ' + esc(l.justificativa) : '') + '. Confira a quantidade que saiu.</div>' : '') +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (tot(l) - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
           ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' + fotosFalta(l) : '') +
@@ -1653,11 +1657,18 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.retorno = function () {
     var e = evento(S.p.id), para = S.p.para ? evento(S.p.para) : null;
     header((para ? 'Contagem do fim do dia: ' : 'Retorno: ') + e.nome, true);
-    var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' }); R.f = R.f || {};
+    var chave = 'rr-' + e.id, R = S.p.r || (S.p.r = ls(chave) || { v: {}, m: {}, j: {}, c: '' }); R.f = R.f || {}; R.t = R.t || {};
+    // dia errado: o evento continua em outro dia (vários dias)
+    var depois = !para && e.serie ? S.data.eventos.filter(function (y) { return y.id !== e.id && y.serie === e.serie && y.status === 'montando' && String(y.data) > String(e.data); })
+      .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); })[0] : null;
     function consumo(id) { return (S.data.consumo || []).indexOf(grupoDoItem(id)) >= 0; }
     function guardar() { ls(chave, R); }
     var motivos = S.data.motivos || [];
-    $('app').innerHTML = (para ? '<div class="panel" style="margin-bottom:10px"><b>' + dataBR(e.data) + ' → ' + dataBR(para.data) + '</b><br>Conte o material que ficou no local no fim do dia. O que faltar tem baixa como perda e o que ficou passa a ser o material de ' + dataBR(para.data).slice(0, 5) + '.</div>' : '') + '<p class="sub">Conte o que ' + (para ? 'ficou' : 'voltou') + '. Se ' + (para ? 'ficou' : 'voltou') + ' menos, escolha o motivo. Se ' + (para ? 'tem' : 'voltou') + ' mais, digite o número certo mesmo assim. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
+    $('app').innerHTML = (depois ? '<div class="panel" style="margin-bottom:10px;border-color:var(--bad)"><b style="color:var(--bad)">Atenção: este é o dia ' + dataBR(e.data).slice(0, 5) + '.</b> O evento continua em <b>' + dataBR(depois.data).slice(0, 5) + '</b>. ' +
+        'Se o material ficou no local, volte e use “Contagem do fim do dia”; o retorno final é lançado no dia ' + dataBR(depois.data).slice(0, 5) + '.</div>' : '') +
+      '<p class="hint" style="margin:0 0 8px">Cada quantidade fica gravada assim que você digita, mesmo sem sinal. Outras pessoas da equipe podem contar outros itens, em outros horários. Quando tudo estiver contado, toque em “' + (para ? 'Enviar contagem' : 'Enviar retorno') + '”.</p>' +
+      '<div class="tools" style="margin-top:0"><button class="btn" id="atz">↻ Ver o que os outros anotaram</button></div>' +
+      (para ? '<div class="panel" style="margin-bottom:10px"><b>' + dataBR(e.data) + ' → ' + dataBR(para.data) + '</b><br>Conte o material que ficou no local no fim do dia. O que faltar tem baixa como perda e o que ficou passa a ser o material de ' + dataBR(para.data).slice(0, 5) + '.</div>' : '') + '<p class="sub">Conte o que ' + (para ? 'ficou' : 'voltou') + '. Se ' + (para ? 'ficou' : 'voltou') + ' menos, escolha o motivo. Se ' + (para ? 'tem' : 'voltou') + ' mais, digite o número certo mesmo assim. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
       '<div class="tools"><button class="btn" id="tudo">' + (para ? 'Ficou tudo certo' : 'Voltou tudo certo') + '</button><button class="btn" id="qr">📷 Ler QR</button></div><div style="height:6px"></div>' +
       agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
         var it = item(l.item_id) || { nome: l.nome }, id = l.item_id, cons = consumo(id), eq = ehEq(it);
@@ -1668,7 +1679,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
           (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select></div>' +
           '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea>' +
           '<div class="fts" id="fs-' + id + '"></div><label class="btn" style="margin-top:8px" for="fi-' + id + '" id="fl-' + id + '">📷 Adicionar foto</label><input type="file" accept="image/*" id="fi-' + id + '" data-ff="' + id + '" hidden>' +
-          '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div></div>';
+          '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div><div class="hint anot" id="st-' + id + '"></div></div>';
       }, '<div class="list">', '</div>'); }).join('') +
       blocoAluguel(e.aluguel, 'retorno') +
       '<label class="f" for="cfr">Quem conferiu ' + (para ? 'a contagem' : 'o retorno') + ' com você?</label><input type="text" id="cfr" list="cfl" autocomplete="off" placeholder="Nome de outra pessoa" value="' + esc(R.c) + '">' + sozinhoCk('cfrso', 'cfr') +
@@ -1689,26 +1700,59 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       $('fl-' + id).style.display = l.length >= 3 ? 'none' : '';
       $('fs-' + id).querySelectorAll('[data-fx]').forEach(function (b) { b.onclick = function () { R.f[id].splice(+b.dataset.k, 1); guardar(); fotos(id); }; });
     }
-    function setV(id, v) { $('v-' + id).value = v; R.v[id] = v; guardar(); upd(id); }
-    // restaura rascunho
-    e.linhas.forEach(function (l) {
-      var id = l.item_id;
-      if (R.v[id] != null && R.v[id] !== '') $('v-' + id).value = R.v[id];
-      if (R.m[id]) $('m-' + id).value = R.m[id];
-      if (R.j[id]) $('j-' + id).value = R.j[id];
-      fotos(id); upd(id);
-    });
-    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); }; });
+    // Cada item anotado vai para o servidor sozinho (ou fica na fila do aparelho sem sinal)
+    var timers = {};
+    function hora(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    function status(id) {
+      var st = $('st-' + id); if (!st) return;
+      var f = fila().anot[e.id], naFila = f && f.itens[id], l = linha(id), pc = l && l.parcial, meu = (S.anotados || {})[e.id] && S.anotados[e.id][id];
+      st.innerHTML = naFila ? '⏳ Guardado neste aparelho. Envia sozinho quando tiver sinal.'
+        : meu && R.t[id] && meu.em === R.t[id] ? '✓ Anotado por você às ' + esc(hora(R.t[id]).split(' ')[1] || '')
+        : pc && String($('v-' + id).value) === String(pc.q) ? '✓ Anotado por ' + esc(pc.por) + ' em ' + esc(hora(pc.em)) : '';
+    }
+    function mudou(id) {
+      R.t[id] = new Date().toISOString(); guardar();
+      clearTimeout(timers[id]);
+      timers[id] = setTimeout(function () {
+        anotar(e.id, para ? para.id : '', id, { qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value, fotos: R.f[id] || [], em: R.t[id] });
+        status(id); enviarFila().then(function () { status(id); });
+      }, 1200);
+      status(id);
+    }
+    function setV(id, v) { $('v-' + id).value = v; R.v[id] = v; guardar(); upd(id); mudou(id); }
+    // restaura: o que foi anotado por último vale (no aparelho ou por outra pessoa no servidor)
+    function restaurar() {
+      e.linhas.forEach(function (l) {
+        var id = l.item_id, pc = l.parcial, local = R.v[id] != null && R.v[id] !== '';
+        if (pc && (!local || !R.t[id] || String(pc.em) > String(R.t[id]))) {
+          $('v-' + id).value = pc.q; R.v[id] = String(pc.q); R.m[id] = pc.m || R.m[id]; R.j[id] = pc.j || ''; if (pc.f && pc.f.length) R.f[id] = pc.f; R.t[id] = pc.em;
+        } else if (local) $('v-' + id).value = R.v[id];
+        if (R.m[id]) $('m-' + id).value = R.m[id];
+        $('j-' + id).value = R.j[id] || '';
+        fotos(id); upd(id); status(id);
+      });
+      guardar();
+    }
+    restaurar();
+    $('atz').onclick = function () {
+      var b = this; b.disabled = true;
+      enviarFila().then(function () { return recarregar(); }).then(function () {
+        var n = evento(e.id); b.disabled = false;
+        if (!n || n.status !== 'em_evento') { toast('Este evento já teve o retorno enviado.'); voltar(); return; }
+        e.linhas = n.linhas; restaurar(); toast('Atualizado');
+      }).catch(function (er) { b.disabled = false; toast(er.rede ? 'Sem sinal agora. Suas anotações estão guardadas.' : er.message); });
+    };
+    document.querySelectorAll('[data-v]').forEach(function (x) { x.oninput = function () { R.v[x.dataset.v] = x.value; guardar(); upd(x.dataset.v); mudou(x.dataset.v); }; });
     document.querySelectorAll('[data-ev1]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ev1, 1); }; });
     document.querySelectorAll('[data-ev0]').forEach(function (b) { b.onclick = function () { setV(b.dataset.ev0, 0); }; });
-    document.querySelectorAll('[data-mm]').forEach(function (x) { x.onchange = function () { R.m[x.dataset.mm] = x.value; guardar(); }; });
-    document.querySelectorAll('[data-jj]').forEach(function (x) { x.oninput = function () { R.j[x.dataset.jj] = x.value; guardar(); }; });
+    document.querySelectorAll('[data-mm]').forEach(function (x) { x.onchange = function () { R.m[x.dataset.mm] = x.value; guardar(); mudou(x.dataset.mm); }; });
+    document.querySelectorAll('[data-jj]').forEach(function (x) { x.oninput = function () { R.j[x.dataset.jj] = x.value; guardar(); mudou(x.dataset.jj); }; });
     document.querySelectorAll('[data-ff]').forEach(function (x) {
       x.onchange = function () {
         var id = x.dataset.ff, f = x.files[0], lb = $('fl-' + id); x.value = ''; if (!f) return;
         lb.textContent = 'Enviando foto…'; lb.style.pointerEvents = 'none'; S.erro = ''; mostrarErro();
         comprimir(f, IS_GAS || REMOTO ? 1000 : 500).then(function (d) { return api('fotoRetorno', { evento_id: e.id, item_id: id, foto: d }); })
-          .then(function (r) { (R.f[id] = R.f[id] || []).push(r.url); guardar(); })
+          .then(function (r) { (R.f[id] = R.f[id] || []).push(r.url); guardar(); mudou(id); })
           .catch(function (er) { S.erro = er.message; mostrarErro(); })
           .then(function () { lb.textContent = '📷 Adicionar foto'; lb.style.pointerEvents = ''; fotos(id); });
       };
@@ -1736,7 +1780,33 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (S.erro) { mostrarErro(); return; }
       var linhas = e.linhas.map(function (l) { var id = l.item_id; return { item_id: id, qtd: $('v-' + id).value, motivo: $('m-' + id).value, justificativa: $('j-' + id).value, fotos: R.f[id] || [] }; });
       var al = lerAluguel(e.aluguel); if (al.erro) { S.erro = al.erro; mostrarErro(); return; }
-      fazer(this, api('registrarRetorno', { evento_id: e.id, para: para ? para.id : '', linhas: linhas, conferido: cf, sozinho: so, aluguel: al.itens, aluguel_ok: al.ok }), function () { ls(chave, null); toast(para ? 'Contagem registrada. O material passou para ' + dataBR(para.data).slice(0, 5) + '.' : 'Retorno registrado. Obrigado!'); voltar(); });
+      var faltam = linhas.filter(function (l) { return l.qtd === '' || l.qtd == null; }).length;
+      if (faltam) { S.erro = faltam + (faltam > 1 ? ' itens ainda não foram contados' : ' item ainda não foi contado') + '. As quantidades que já estão aqui ficam gravadas: quem contar os outros itens anota depois, e o retorno é enviado quando todos estiverem contados.'; mostrarErro(); return; }
+      // confere aqui o que o servidor confere, para não descobrir o erro só quando o sinal voltar
+      var semMot = linhas.filter(function (x) { var l = linha(x.item_id); return +x.qtd < tot(l) && !consumo(x.item_id) && !x.motivo && !x.justificativa.trim(); })[0];
+      var semDet = linhas.filter(function (x) { var l = linha(x.item_id); return +x.qtd < tot(l) && x.motivo === 'Outro' && !x.justificativa.trim(); })[0];
+      if (semMot || semDet) { var x = semMot || semDet, it = item(x.item_id) || { nome: linha(x.item_id).nome }; S.erro = semMot ? 'Escolha o motivo da falta de "' + nomeIt(it) + '".' : 'Explique em poucas palavras o que aconteceu com "' + nomeIt(it) + '".'; mostrarErro(); $('r-' + x.item_id).scrollIntoView({ block: 'center' }); return; }
+      var pd = { evento_id: e.id, para: para ? para.id : '', linhas: linhas, conferido: cf, sozinho: so, aluguel: al.itens, aluguel_ok: al.ok, token: S.token, who: S.who, rid: novoId() }, btn = this;
+      function enviar(encerrar) {
+        if (encerrar) pd.encerrar = true;
+        btn.disabled = true; S.erro = ''; mostrarErro();
+        api('registrarRetorno', pd).then(function () {
+          var f = fila(); delete f.anot[e.id]; ls('fila', f); avisoFila();
+          return recarregar().then(function () { ls(chave, null); toast(para ? 'Contagem registrada. O material passou para ' + dataBR(para.data).slice(0, 5) + '.' : 'Retorno registrado. Obrigado!'); voltar(); });
+        }).catch(function (er) {
+          btn.disabled = false;
+          if (!er.rede) { S.erro = er.message; mostrarErro(); return; }
+          var f = fila(); f.fim[e.id] = pd; ls('fila', f); avisoFila();
+          $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Sem sinal"><h2>Sem sinal agora</h2><p>O ' + (para ? 'contagem' : 'retorno') + ' ficou <b>guardado neste aparelho</b> e será enviado sozinho quando o celular tiver sinal ou Wi-Fi. Pode fechar esta tela.</p>' +
+            '<p class="hint">Enquanto não for enviado, o evento continua aparecendo como “No evento” para os outros. Não apague os dados do navegador e abra o app de novo quando tiver sinal.</p><div class="row" style="margin-top:16px"><button class="btn primary" id="m-fc">Entendi</button></div></div></div>';
+          $('m-fc').onclick = function () { fecharModal(); voltar(); };
+        });
+      }
+      if (!depois) { enviar(false); return; }
+      $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="Confirmar o dia"><h2>Este é o dia ' + dataBR(e.data).slice(0, 5) + '</h2>' +
+        '<p>O evento continua em <b>' + dataBR(depois.data) + '</b>. Registrar o retorno aqui encerra o dia ' + dataBR(e.data).slice(0, 5) + ' como se todo o material tivesse voltado ao depósito, e o dia ' + dataBR(depois.data).slice(0, 5) + ' fica sem material.</p>' +
+        '<p>Se o material ficou no local, volte e use <b>“Contagem do fim do dia”</b>.</p><div class="row" style="margin-top:16px"><button class="btn primary" id="m-fc">Voltar</button><button class="btn danger" id="m-ok">O material voltou mesmo ao depósito</button></div></div></div>';
+      $('m-fc').onclick = fecharModal; $('m-ok').onclick = function () { fecharModal(); enviar(true); };
     };
   };
 
@@ -2208,6 +2278,59 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     mostrarErro();
   }
 
+  // ---- Fila do aparelho: o que foi anotado sem sinal é enviado sozinho quando o sinal volta (2026-11-15) ----
+  // fila.anot[evento] = { para, token, who, itens: { item_id: {qtd, motivo, justificativa, fotos, em} } }
+  // fila.fim[evento]  = pedido completo de registrarRetorno (retorno ou contagem do fim do dia)
+  function fila() { var f = ls('fila') || {}; f.anot = f.anot || {}; f.fim = f.fim || {}; return f; }
+  function filaN() { var f = fila(), n = 0; Object.keys(f.anot).forEach(function (k) { n += Object.keys(f.anot[k].itens || {}).length; }); return n + Object.keys(f.fim).length; }
+  function avisoFila() {
+    var n = filaN(), b = $('filaav');
+    if (!b) { b = document.createElement('div'); b.id = 'filaav'; b.className = 'rede'; var r = $('rede'); r.parentNode.insertBefore(b, r.nextSibling); }
+    b.hidden = !n; b.textContent = n ? '⏳ ' + n + (n > 1 ? ' anotações guardadas' : ' anotação guardada') + ' neste aparelho. O app envia sozinho quando tiver sinal. Não apague os dados do navegador.' : '';
+  }
+  function anotar(ev, para, id, dado) {
+    var f = fila(), a = f.anot[ev] || (f.anot[ev] = { para: para || '', itens: {} });
+    a.token = S.token; a.who = S.who; a.itens[id] = dado; ls('fila', f); avisoFila();
+  }
+  var enviando = false;
+  function enviarFila() {
+    if (enviando) return Promise.resolve();
+    var f = fila(), tarefas = [];
+    Object.keys(f.anot).forEach(function (ev) {
+      var a = f.anot[ev], ids = Object.keys(a.itens || {});
+      if (!ids.length) { delete f.anot[ev]; return; }
+      tarefas.push(function () {
+        var itens = ids.map(function (id) { return Object.assign({ item_id: id }, a.itens[id]); });
+        return api('anotarRetorno', { token: a.token, who: a.who, evento_id: ev, para: a.para, itens: itens }).then(function () {
+          var g = fila(), b = g.anot[ev];
+          if (b) { ids.forEach(function (id) { if (b.itens[id] && b.itens[id].em === a.itens[id].em) delete b.itens[id]; }); if (!Object.keys(b.itens).length) delete g.anot[ev]; }
+          ls('fila', g); (S.anotados = S.anotados || {})[ev] = Object.assign((S.anotados || {})[ev] || {}, a.itens);
+        }, function (e) { if (!e.rede) { var g = fila(); delete g.anot[ev]; ls('fila', g); toast('Não deu para anotar: ' + e.message); } });
+      });
+    });
+    Object.keys(f.fim).forEach(function (ev) {
+      var pd = f.fim[ev];
+      tarefas.push(function () {
+        return api('registrarRetorno', pd).then(function () { var g = fila(); delete g.fim[ev]; ls('fila', g); ls('rr-' + ev, null); toast('Retorno guardado no aparelho foi enviado.'); },
+          function (e) {
+            if (e.rede) return;
+            var g = fila(); delete g.fim[ev]; ls('fila', g);
+            if (/não está aguardando retorno/.test(e.message)) { ls('rr-' + ev, null); return; } // já tinha chegado antes
+            toast('O retorno guardado não foi aceito: ' + e.message + ' Abra o evento e envie de novo.');
+          });
+      });
+    });
+    ls('fila', f);
+    if (!tarefas.length) { avisoFila(); return Promise.resolve(); }
+    enviando = true;
+    return tarefas.reduce(function (pr, t) { return pr.then(t); }, Promise.resolve()).then(function () {
+      enviando = false; avisoFila();
+      if (S.token && S.data) return recarregar().then(function () { if (['evento', 'eventos', 'inicio'].indexOf(S.view) >= 0 && !$('modal').innerHTML) render(); }).catch(function () {});
+    }, function () { enviando = false; avisoFila(); });
+  }
+  setInterval(function () { if (filaN()) enviarFila(); }, 30000);
+  window.addEventListener('online', function () { enviarFila(); });
+
   // sem conexão: tenta de novo a cada 20 s (e quando o celular avisa que voltou a internet)
   function religar() {
     if (!S.offline || !S.token || S.religando) return;
@@ -2226,7 +2349,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   else {
     // mostra na hora os últimos dados guardados no aparelho e atualiza em seguida
     var guardados = ls('dados'); if (guardados && guardados.itens) S.data = guardados;
-    render();
+    render(); avisoFila(); if (filaN()) enviarFila();
     recarregar().then(function () {
       if (LINK && S.token && sess()) { S.stack = [{ view: 'inicio', p: {} }]; S.view = 'evento'; S.p = { id: LINK.split('.')[0] }; }
       render();

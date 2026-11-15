@@ -302,6 +302,12 @@ var CORE = (function () {
       return typeof u === 'string' && (/^https:\/\/drive\.google\.com\/[\w?=&\/.-]+$/.test(u) || /^data:image\/jpeg;base64,[\w+\/=]+$/.test(u));
     }).slice(0, 6);
   }
+  // Próximo dia do mesmo evento (vários dias) que ainda espera o material
+  function proximoDiaDaSerie(db, ev) {
+    if (!ev.serie) return null;
+    return db.all('eventos').filter(function (y) { return y.id !== ev.id && y.serie === ev.serie && y.status === 'montando' && String(y.data) > String(ev.data); })
+      .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); })[0] || null;
+  }
   function naEquipeDoEvento(s, conv, ev) {
     if (s) return;
     if (!(conv && conv.evento_id === ev.id)) falha('Só quem está na equipe deste evento pode fazer isso. Abra pelo link enviado no grupo do evento.');
@@ -538,7 +544,8 @@ var CORE = (function () {
             return { id: l.id, item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida), qtd_extra: num(l.qtd_extra),
               qtd_chegada: l.qtd_chegada === '' || l.qtd_chegada == null ? null : num(l.qtd_chegada), extra_por: l.extra_por || '',
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
-              justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []) };
+              justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []),
+              parcial: e.status === 'em_evento' ? json(l.parcial, null) : null };
           }) };
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
@@ -1284,6 +1291,31 @@ var CORE = (function () {
       return { url: db.salvarFoto(d, 'Retorno ' + ev.nome + ' ' + (ev.data || '') + ' - ' + (l ? l.item_nome : 'item')) };
     },
 
+    // Cada pessoa anota as quantidades que já contou, em horários diferentes (2026-11-15). Não encerra o evento.
+    anotarRetorno: function (db, p, s, quem, conv) {
+      var ev = porId(db.all('eventos'), p.evento_id);
+      if (!ev) falha('Evento não encontrado.');
+      if (ev.status !== 'em_evento') return { fechado: true };
+      var prox = p.para ? porId(db.all('eventos'), p.para) : null;
+      if (prox && (prox.serie !== ev.serie || !ev.serie)) prox = null;
+      if (!s && !(conv && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id))))
+        falha('Só quem está na lista deste evento pode anotar o retorno. Abra pelo link enviado no grupo do evento.');
+      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 80), feitos = [];
+      (p.itens || []).forEach(function (x) {
+        var l = linhas.filter(function (y) { return y.item_id === x.item_id; })[0];
+        if (!l) return;
+        var vazio = x.qtd === '' || x.qtd == null;
+        var dado = vazio ? '' : JSON.stringify({ q: Math.max(0, Math.round(num(x.qtd))), m: MOTIVOS.indexOf(x.motivo) >= 0 ? x.motivo : '', j: texto(x.justificativa, 500),
+          f: fotosValidas(x.fotos), por: por, em: texto(x.em, 30) || agora() });
+        var ant = json(l.parcial, null);
+        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) return; // já tem uma anotação mais nova de outra pessoa
+        db.update('evento_itens', l.id, { parcial: dado });
+        feitos.push((vazio ? 'apagou ' : (num(x.qtd) + '/' + totalLinha(l) + ' ')) + l.item_nome);
+      });
+      if (feitos.length) log(db, quem, 'Anotou quantidades do retorno', ev.nome + ': ' + feitos.join(', '));
+      return { anotados: feitos.length };
+    },
+
     registrarRetorno: function (db, p, s, quem, conv) {
       var ev = porId(db.all('eventos'), p.evento_id);
       if (!ev) falha('Evento não encontrado.');
@@ -1294,6 +1326,9 @@ var CORE = (function () {
       if (prox && prox.status !== 'montando') falha('O dia ' + dataCurta(prox.data) + ' já está com o material.');
       if (!s && !(conv && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id))))
         falha('Só quem está na lista deste evento pode registrar o retorno. Abra pelo link enviado no grupo do evento.');
+      // Retorno final no dia errado (2026-11-15: lista final do dia 14 lançada no dia 13): se o evento continua em outro dia, pede confirmação.
+      var depois = !prox && proximoDiaDaSerie(db, ev);
+      if (depois && !p.encerrar) falha('Este evento continua em ' + dataCurta(depois.data) + '. Se o material ficou no local, use “Contagem do fim do dia” e registre o retorno final no dia ' + dataCurta(depois.data) + '.');
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
@@ -1315,7 +1350,7 @@ var CORE = (function () {
         } else if (q > saiu) { mot = ''; aMais.push((q - saiu) + ' × ' + l.item_nome + (just ? ' (' + just + ')' : '')); }
         else { mot = ''; just = ''; }
         var fts = q < saiu ? fotosValidas(e.fotos) : [];
-        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '' });
+        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '', parcial: '' });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
         if (q < saiu) {
           var custo = itl ? num(itl.custo) * (saiu - q) : 0; custoTotal += custo;
@@ -1510,7 +1545,7 @@ var CORE = (function () {
       'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga', 'serie',
       'lista_estoque', 'chegada_por', 'chegada_em', 'chegada_status', 'chegada_obs', 'chegada_revisao', 'aluguel', 'tentativas'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por', 'fotos',
-      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada'],
+      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada', 'parcial'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
