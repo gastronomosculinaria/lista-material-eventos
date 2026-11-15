@@ -244,6 +244,11 @@ var CORE = (function () {
     if (r.length === 1) return true;
     return t.length > 1 && t.slice(1).every(function (w) { return r.indexOf(w) >= 0; });
   }
+  // Quem tentou abrir o link do evento sem estar na equipe (some quando a pessoa entra na equipe)
+  function tentativasDe(ev) {
+    return json(ev.tentativas, []).filter(function (x) { return x && x.nome && !naLista(ev, x.nome); })
+      .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt'); });
+  }
   function naLista(ev, nome) { return json(ev.prestadores, []).filter(function (pr) { return mesmoNome(nome, pr.nome); })[0] || null; }
   function perdasPendentes(db) {
     var evs = {}, its = {};
@@ -508,7 +513,7 @@ var CORE = (function () {
           prestadores: ordemNome(json(e.prestadores, [])).map(function (x) { return s ? x : { nome: x.nome, coord: !!x.coord, apelido: x.apelido || curto(x.nome) }; }), chave: s ? e.chave || '' : undefined, criado_por: e.criado_por, concluido_em: e.concluido_em,
           retorno_por: e.retorno_por, escala_status: e.escala_status || '', escala_por: e.escala_por || '', escala_em: e.escala_em || '', prazo_escala: prazoEscala(e.data), separado_por: e.separado_por || '', conferido_saida: e.conferido_saida || '', conferido_retorno: e.conferido_retorno || '',
           lista_estoque: e.lista_estoque === 'sim', chegada_por: e.chegada_por || '', chegada_em: e.chegada_em || '', chegada_status: e.chegada_status || '', chegada_obs: e.chegada_obs || '', chegada_revisao: e.chegada_revisao || '',
-          aluguel: aluguelDe(e),
+          aluguel: aluguelDe(e), tentativas: s && s.escala && e.status !== 'concluido' ? tentativasDe(e) : [],
           linhas: ordemItens(linhas.filter(function (l) { return l.evento_id === e.id; })).map(function (l) {
             return { id: l.id, item_id: l.item_id, nome: l.item_nome, qtd_saida: num(l.qtd_saida), qtd_extra: num(l.qtd_extra),
               qtd_chegada: l.qtd_chegada === '' || l.qtd_chegada == null ? null : num(l.qtd_chegada), extra_por: l.extra_por || '',
@@ -541,7 +546,11 @@ var CORE = (function () {
       var pr = naLista(ev, nome);
       if (!pr) {
         log(db, { nome: nome, telefone: tel }, 'Tentou abrir evento sem estar na lista', ev.nome);
-        falha('Seu nome não está na lista deste evento. Confira nome e sobrenome ou fale com o Master.');
+        // guarda no evento para a coordenação ver quem tentou entrar e ainda não está na equipe
+        var tt = tentativasDe(ev).filter(function (x) { return partesNome(x.nome).join(' ') !== partesNome(nome).join(' '); });
+        tt.push({ nome: nome, telefone: tel, em: agora() });
+        db.update('eventos', ev.id, { tentativas: JSON.stringify(tt.slice(-20)) });
+        falha('Seu nome ainda não está na equipe deste evento. A coordenação pode estar terminando a escala: espere um pouco e tente de novo, ou avise a coordenação. Confira também se digitou nome e sobrenome.');
       }
       var bx = pr.id ? porId(db.all('equipe'), pr.id) : acharNaEquipe(db, pr.nome);
       if (bx && bx.bloqueado === 'sim') {
@@ -807,6 +816,9 @@ var CORE = (function () {
         return { id: it.id };
       }
       dados.ativo = 'sim'; dados.criado_em = agora(); dados.foto = dados.foto || '';
+      var chaveNome = function (x) { return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+      var igual = !equip && todos.filter(function (x) { return x.tipo !== 'equipamento' && chaveNome(x.nome) === chaveNome(nome); })[0];
+      if (igual) falha('Já existe "' + igual.nome + '" no inventário (grupo ' + (igual.grupo || 'Material') + '). Use o item que já existe.');
       if (!equip) {
         dados.id = uid(); db.insert('itens', dados);
         log(db, quem, 'Incluiu item no inventário', nome + ' (' + dados.qtd_total + ' un., ' + dados.categoria + ')');
@@ -1261,21 +1273,23 @@ var CORE = (function () {
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
-      var resumo = [], faltas = [], todosItens = db.all('itens'), confRet = conferente(p, quem), custoTotal = 0;
+      var resumo = [], faltas = [], aMais = [], todosItens = db.all('itens'), confRet = conferente(p, quem), custoTotal = 0;
       linhas.forEach(function (l) {
         var itl = porId(todosItens, l.item_id), consumo = itl && CONSUMO.indexOf(grupoDe(itl)) >= 0;
         var e = envio[l.item_id];
         if (!e || e.qtd === '' || e.qtd == null) falha('Informe quantos voltaram de "' + l.item_nome + '".');
         var q = Math.max(0, Math.round(num(e.qtd)));
         var saiu = totalLinha(l);
-        if (q > saiu) falha('"' + l.item_nome + '": voltaram mais (' + q + ') do que saíram (' + saiu + ').');
+        // Voltou mais do que saiu (ex.: a separação mandou a mais sem anotar): aceita e avisa o estoque, sem inventar falta.
+        if (q > saiu && itl && itl.tipo === 'equipamento') falha('"' + l.item_nome + '" é equipamento numerado: volta 1 ou 0.');
         var just = texto(e.justificativa, 500), mot = MOTIVOS.indexOf(e.motivo) >= 0 ? e.motivo : '';
         if (q < saiu) {
           if (!mot && consumo) mot = 'Consumido';
           if (!mot && just) mot = 'Outro';
           if (!mot) falha('Escolha o motivo da falta de "' + l.item_nome + '".');
           if (mot === 'Outro' && !just) falha('Explique em poucas palavras o que aconteceu com "' + l.item_nome + '".');
-        } else { mot = ''; just = ''; }
+        } else if (q > saiu) { mot = ''; aMais.push((q - saiu) + ' × ' + l.item_nome + (just ? ' (' + just + ')' : '')); }
+        else { mot = ''; just = ''; }
         var fts = q < saiu ? fotosValidas(e.fotos) : [];
         db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '' });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
@@ -1302,6 +1316,7 @@ var CORE = (function () {
       }
       db.update('eventos', ev.id, { status: 'concluido', concluido_em: agora(), retorno_por: quem.nome + ' ' + quem.telefone, conferido_retorno: confRet });
       log(db, quem, 'Registrou retorno do material', ev.nome + ': ' + resumo.join(', ') + aluTxt +
+        (aMais.length ? ' | Voltaram a mais (conferir a saída): ' + aMais.join('; ') : '') +
         (faltas.length ? ' | Faltas (aguardando confirmação do Master/estoque): ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
         (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Conferido por ' + confRet);
       sincAgenda(db, ev.id, quem);
@@ -1465,7 +1480,7 @@ var CORE = (function () {
     eventos: ['id', 'nome', 'data', 'local', 'obs', 'prestadores', 'status', 'criado_por', 'criado_em', 'concluido_em', 'retorno_por',
       'hora_inicio', 'hora_fim', 'agenda_id', 'agenda_criado', 'separado_por', 'conferido_saida', 'conferido_retorno', 'chave',
       'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga', 'serie',
-      'lista_estoque', 'chegada_por', 'chegada_em', 'chegada_status', 'chegada_obs', 'chegada_revisao', 'aluguel'],
+      'lista_estoque', 'chegada_por', 'chegada_em', 'chegada_status', 'chegada_obs', 'chegada_revisao', 'aluguel', 'tentativas'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por', 'fotos',
       'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],

@@ -63,6 +63,7 @@ h1, h2, h3, .tile b, .zona .zh b { font-weight: 700; letter-spacing: -.005em }
 .btn.danger { color: var(--bad); border-color: var(--bad) }
 .btn.block { width: 100% }
 .btn:disabled { opacity: .5; cursor: default }
+.btn.on { background: var(--wine); color: var(--wine-ink); border-color: var(--wine) }
 .btn:focus-visible, .tile:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .chip:focus-visible { outline: 3px solid var(--wine); outline-offset: 2px }
 .row { display: flex; gap: 10px; flex-wrap: wrap }
 .row > * { flex: 1 1 140px }
@@ -91,6 +92,9 @@ textarea { min-height: 80px }
 .pill.concluido { background: var(--ok-soft); color: var(--ok) }
 .pill.falta { background: var(--bad-soft); color: var(--bad) }
 .list { display: flex; flex-direction: column; gap: 10px }
+.parec { background: var(--surface); border: 1px dashed var(--terra); border-radius: var(--r); padding: 10px; margin-top: 8px; font-size: 14px }
+.parec .li { margin-top: 8px; padding: 8px }
+.novoit { margin-top: 12px; text-align: center }
 .li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; gap: 12px; align-items: center; cursor: pointer; text-align: left; width: 100% }
 .li .ph { width: 56px; height: 56px; flex: none; border-radius: 10px; font-size: 18px }
 .li .mid { flex: 1; min-width: 0 }
@@ -279,10 +283,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   }
   function ir(view, p, semHistorico) {
     if (!semHistorico) S.stack.push({ view: S.view, p: S.p });
-    S.view = view; S.p = p || {}; S.erro = '';
+    S.view = view; S.p = p || {}; S.erro = ''; S.so = null;
     window.scrollTo(0, 0); render();
   }
-  function voltar() { var a = S.stack.pop() || { view: 'inicio', p: {} }; S.view = a.view; S.p = a.p; S.erro = ''; render(); }
+  function voltar() { var a = S.stack.pop() || { view: 'inicio', p: {} }; S.view = a.view; S.p = a.p; S.erro = ''; S.so = null; render(); }
   function inicio() { S.stack = []; S.view = 'inicio'; S.p = {}; render(); }
   function fazer(btn, promessa, ok) {
     if (btn) btn.disabled = true;
@@ -438,14 +442,21 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   var V = {};
 
   function sairDeTudo() { S.who = null; S.token = null; S.data = null; ls('who', null); ls('token', null); ls('dados', null); ls('convE', null); }
+  // Nome e telefone da última entrada neste aparelho (para não digitar de novo a cada vez)
+  function ultimo() { return ls('ultimo') || {}; }
+  function ligarVerSenha() {
+    $('verpw').onclick = function () { var v = $('pw').type === 'password'; $('pw').type = v ? 'text' : 'password'; this.textContent = v ? 'Ocultar' : 'Mostrar'; this.setAttribute('aria-pressed', v); };
+  }
   V.ident = function () {
+    var ult = ultimo();
     header('Gastrônomos');
     bar('');
     $('app').innerHTML = demoAviso() + hero(APP_NOME, MARCA.fotos.ident) +
       '<h2>Área da equipe</h2><p class="sub">Master e estoquistas. Coordenadores e equipe do evento entram pelo <b>link do evento</b> enviado no grupo do WhatsApp.</p>' +
-      '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" required>' +
-      '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
-      '<label class="f" for="pw">Senha</label><input type="password" id="pw" autocomplete="current-password" required>' +
+      '<form id="f"><label class="f" for="nm">Seu nome</label><input type="text" id="nm" autocomplete="name" value="' + esc(ult.nome || '') + '" required>' +
+      '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" value="' + esc(ult.telefone || '') + '" required>' +
+      '<label class="f" for="pw">Senha</label><div style="display:flex;gap:8px"><input type="password" id="pw" autocomplete="current-password" required style="flex:1"><button type="button" class="btn" id="verpw" aria-pressed="false">Mostrar</button></div>' +
+      '<p class="hint" style="margin-top:6px">Esqueceu a senha? Peça ao Master para trocar em Equipe e senhas.</p>' +
       '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Entrar</button></form>';
     $('f').onsubmit = function (e) {
       e.preventDefault();
@@ -453,20 +464,23 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (who.nome.length < 2 || digitos(who.telefone).length < 8) { S.erro = 'Informe seu nome e um telefone com DDD.'; mostrarErro(); return; }
       S.who = who; btn.disabled = true;
       api('login', { senha: $('pw').value }).then(function (r) {
-        S.token = r.token; ls('token', r.token); ls('who', who); ls('convE', null);
+        S.token = r.token; ls('token', r.token); ls('who', who); ls('convE', null); ls('ultimo', who);
         return recarregar();
       }).then(function () { toast('Bem-vindo à área da equipe'); if (LINK) { S.stack = []; ir('evento', { id: LINK.split('.')[0] }, true); } else inicio(); })
-        .catch(function (err) { S.who = null; S.erro = err.message; btn.disabled = false; mostrarErro(); });
+        .catch(function (err) { S.who = null; S.erro = err.message; btn.disabled = false; mostrarErro(); $('pw').select(); });
     };
+    ligarVerSenha();
+    if (ult.nome) $('pw').focus();
   };
 
   V.convite = function () {
+    var ult = ultimo();
     header('Gastrônomos');
     bar('');
     $('app').innerHTML = demoAviso() + hero(APP_NOME, MARCA.fotos.ident) +
       '<h2>Equipe do evento</h2><p class="sub">Confirme seu nome e sobrenome como estão na lista do evento.</p>' +
-      '<form id="f"><label class="f" for="nm">Nome e sobrenome</label><input type="text" id="nm" autocomplete="name" placeholder="Ex.: Ana Souza" required>' +
-      '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required>' +
+      '<form id="f"><label class="f" for="nm">Nome e sobrenome</label><input type="text" id="nm" autocomplete="name" placeholder="Ex.: Ana Souza" value="' + esc(ult.nome || '') + '" required>' +
+      '<label class="f" for="tel">Telefone com DDD</label><input type="tel" id="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" value="' + esc(ult.telefone || '') + '" required>' +
       '<p class="hint" style="margin-top:6px">O telefone fica só para registro.</p>' +
       '<div id="erro" class="err" hidden></div><div style="height:16px"></div><button class="btn primary block" id="ok">Abrir o evento</button></form>' +
       '<p class="hint" style="margin-top:22px">É Master ou do estoque? <a href="#" id="eq">Entrar com senha</a></p>';
@@ -476,7 +490,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var who = { nome: $('nm').value.trim(), telefone: $('tel').value.trim() }, btn = $('ok');
       btn.disabled = true; S.erro = ''; mostrarErro();
       api('entrarEvento', { e: LINK, who: who }).then(function (r) {
-        S.who = { nome: r.nome, telefone: who.telefone }; S.token = r.token;
+        S.who = { nome: r.nome, telefone: who.telefone }; S.token = r.token; ls('ultimo', who);
         ls('who', S.who); ls('token', r.token); ls('convE', LINK);
         return recarregar().then(function () { S.stack = []; S.view = 'inicio'; ir('evento', { id: r.evento_id }); });
       }).catch(function (err) { S.erro = err.message; btn.disabled = false; mostrarErro(); });
@@ -512,7 +526,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     }
     h += '</div>';
     h += '<h2>Eventos dos próximos 7 dias</h2><div id="agh"><div class="loading">Carregando eventos…</div></div><p style="margin-top:10px"><a href="#" id="vpe">Ver próximos eventos (30 dias) ›</a></p>';
-    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.7 • Gastrônomos</p>';
+    h += '<p class="hint" style="margin-top:22px">Não é ' + esc(S.who.nome) + '? <a href="#" id="troca">Trocar de pessoa</a></p><p class="hint" style="font-size:12px">Versão 27.9 • Gastrônomos</p>';
     if (d.masterPadrao) h = '<div class="err">A senha master ainda é a inicial. Troque em <b>Equipe e senhas</b>.</div>' + h;
     var np = (d.perdas || []).length;
     if (s.estoque && (!d.ultimaContagem || String(d.ultimaContagem.em).slice(0, 7) !== hoje().slice(0, 7)))
@@ -587,11 +601,39 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     return ordem.filter(function (g) { return mapa[g]; }).map(function (g) { return [g, mapa[g]]; });
   }
   function filtrar(lista) {
-    var q = S.q.toLowerCase();
+    var q = S.q;
     if (S.grp !== 'Todos' && grupos().indexOf(S.grp) < 0) S.grp = 'Todos';
     return lista.filter(function (i) {
-      return (S.grp === 'Todos' || i.grupo === S.grp) && (!q || (nomeIt(i) + ' ' + i.categoria + ' ' + i.grupo + ' ' + (i.descricao || '')).toLowerCase().indexOf(q) >= 0);
+      return (S.grp === 'Todos' || i.grupo === S.grp) && (!S.so || S.so(i)) && casaBusca(nomeIt(i) + ' ' + i.categoria + ' ' + i.grupo + ' ' + (i.subgrupo || '') + ' ' + (i.descricao || ''), q);
     });
+  }
+  // Busca tolerante: sem acento, palavras em qualquer ordem, plural/singular, "bowl" = "bool", "richaud" = "richard"
+  // e um erro de digitação em palavras de 5 letras ou mais. Ex.: "bowl cristal" acha "Bool de cristal M".
+  var SINON = { bowl: 'bool', bol: 'bool', boul: 'bool', richard: 'richaud', rechaud: 'richaud', xicara: 'xicara', chicara: 'xicara', ramekin: 'ramequinho', pirex: 'pirex', ardosia: 'ardosia' };
+  var VAZIAS = { de: 1, da: 1, do: 1, das: 1, dos: 1, com: 1, sem: 0, e: 1, para: 1, pra: 1, p: 0, a: 1, o: 1 };
+  function raiz(w) { w = SINON[w] || w; if (w.length > 4 && /s$/.test(w)) w = w.replace(/(oe|ae|e)?s$/, ''); return SINON[w] || w; }
+  function palavras(t) { return sem(t).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(function (w) { return w && !VAZIAS[w]; }).map(raiz); }
+  function perto(a, b) { // distância de edição <= 1
+    if (Math.abs(a.length - b.length) > 1) return false;
+    var i = 0, j = 0, d = 0;
+    while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+    return d + (a.length - i) + (b.length - j) <= 1;
+  }
+  function casaPalavra(q, ws) { return ws.some(function (w) { return w.indexOf(q) === 0 || (q.length >= 5 && (perto(q, w) || perto(q, w.slice(0, q.length)))); }); }
+  function casaBusca(texto, q) {
+    var qs = palavras(q); if (!qs.length) return true;
+    var ws = palavras(texto);
+    return qs.every(function (x) { return casaPalavra(x, ws); });
+  }
+  // Itens já cadastrados com nome parecido (para não cadastrar o mesmo item duas vezes)
+  function parecidos(nome, menosId) {
+    var qs = palavras(nome); if (!qs.length) return [];
+    return (S.data.itens || []).map(function (i) {
+      if (i.id === menosId) return null;
+      var ws = palavras(nomeIt(i)), n = qs.filter(function (x) { return casaPalavra(x, ws); }).length;
+      var nota = n / Math.max(qs.length, ws.length);
+      return nota >= 0.5 || (n >= 2 && n === Math.min(qs.length, ws.length)) ? { i: i, nota: nota } : null;
+    }).filter(Boolean).sort(function (a, b) { return b.nota - a.nota || cmpNome(a.i, b.i); }).slice(0, 6).map(function (x) { return x.i; }).sort(cmpNome);
   }
   function chipsGrupos(lista, atual, attr) {
     return '<div class="chips">' + ['Todos'].concat(lista).map(function (g) {
@@ -629,16 +671,22 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar(s && s.inventario ? '<button class="btn primary" id="novo">+ Cadastrar item</button>' : '');
     $('app').innerHTML = busca() +
       (s && s.inventario ? '<div class="tools"><button class="btn" id="org">Organizar grupos</button><button class="btn" id="vrs">Cadastrar vários</button><button class="btn" id="etq">Etiquetas QR</button></div>' : '') +
+      (s && s.inventario ? '<div class="tools"><button class="btn" id="semq" aria-pressed="false"></button></div>' : '') +
       '<div id="lst"></div>' +
       (s && !s.inventario ? '<p class="hint" style="margin-top:16px">Sua senha não permite incluir ou excluir itens. O Master libera isso em Equipe e senhas.</p>' : '') +
       (!s ? '<p class="hint" style="margin-top:16px">Para cadastrar itens, entre na Área da equipe.</p>' : '');
+    var soSemQ = false;
+    function semQ(i) { return !ehEq(i) && !(i.qtd_total > 0); }
     function desenhar() {
-      var l = filtrar(S.data.itens).sort(function (a, b) { return cmpNome(a, b); });
+      S.so = soSemQ ? semQ : null;
+      var l = filtrar(S.data.itens).sort(function (a, b) { return cmpNome(a, b); }); S.so = null;
+      if ($('semq')) { var nq = S.data.itens.filter(semQ).length; $('semq').textContent = (soSemQ ? '✓ ' : '') + 'Sem quantidade (' + nq + ')'; $('semq').hidden = !nq && !soSemQ; }
       function card(i) {
         var baixo = i.disponivel < i.qtd_total;
         return '<button class="card" data-it="' + i.id + '"><div class="ph">' + foto(i) + '</div><div class="tx"><span class="nm">' + esc(nomeIt(i)) + '</span>' +
           (ehEq(i) ? '<span class="hint">Equipamento</span><span class="qty">' + (i.fora ? 'Em evento' : '<b>No depósito</b>') + '</span>'
-            : '<span class="hint">' + esc(i.categoria) + '</span><span class="qty"><b>' + i.disponivel + '</b> ' + (baixo ? 'no depósito de ' + i.qtd_total : 'no estoque') + '</span>') + '</div></button>';
+            : '<span class="hint">' + esc(i.categoria) + '</span>' + (!(i.qtd_total > 0) ? '<span class="qty" style="color:var(--terra)">Quantidade não informada</span>'
+              : '<span class="qty"><b>' + i.disponivel + '</b> ' + (baixo ? 'no depósito de ' + i.qtd_total : 'no estoque') + '</span>')) + '</div></button>';
       }
       $('lst').innerHTML = l.length ? agrupar(l, function (i) { return i.grupo; }).map(function (g) {
         return (S.grp === 'Todos' ? cabGrupo(g[0], g[1].length) : '') + porSub(g[0], g[1], function (i) { return i; }, card, '<div class="grid">', '</div>');
@@ -646,7 +694,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       document.querySelectorAll('[data-it]').forEach(function (b) { b.onclick = function () { detalheItem(b.dataset.it); }; });
     }
     ligarBusca(desenhar); desenhar();
-    if ($('novo')) $('novo').onclick = function () { ir('item', {}); };
+    if ($('semq')) $('semq').onclick = function () { soSemQ = !soSemQ; this.classList.toggle('on', soSemQ); this.setAttribute('aria-pressed', soSemQ); desenhar(); };
+    if ($('novo')) $('novo').onclick = function () { ir('item', { nome: S.q.trim() }); };
     if ($('org')) $('org').onclick = function () { ir('grupos'); };
     if ($('vrs')) $('vrs').onclick = function () { ir('varios'); };
     if ($('etq')) $('etq').onclick = function () { ir('etiquetas'); };
@@ -693,7 +742,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var n = [];
     (S.data.pessoas || []).forEach(function (p) { if (p.ativo) n.push(p.nome); });
     ((ev && ev.prestadores) || []).forEach(function (p) { if (p.nome && n.indexOf(p.nome) < 0) n.push(p.nome); });
-    return n.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+    return n.sort(function (a, b) { return sem(a).localeCompare(sem(b)); }).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
   }
   function pedirConferente(titulo, texto, ev, aoConfirmar) {
     $('modal').innerHTML = '<div class="modal" id="mbg"><div class="sheet" role="dialog" aria-label="' + esc(titulo) + '"><h2>' + esc(titulo) + '</h2><p class="sub">' + esc(texto) + '</p>' +
@@ -806,7 +855,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   }
 
   V.item = function () {
-    var i = S.p.id ? item(S.p.id) : { nome: '', categoria: '', grupo: S.grp !== 'Todos' ? S.grp : 'Material', descricao: '', qtd_total: '', tipo: '', numero: '', custo: 0 };
+    var i = S.p.id ? item(S.p.id) : { nome: S.p.nome || '', categoria: '', grupo: S.grp !== 'Todos' ? S.grp : 'Material', descricao: '', qtd_total: '', tipo: '', numero: '', custo: 0 };
+    var doEv = S.p.ev ? evento(S.p.ev) : null; // veio da separação de um evento: o item novo já entra na lista
     var nova = null, tipo = i.tipo || '';
     header(S.p.id ? 'Editar item' : 'Cadastrar item', true);
     var cats = S.data.categorias.slice();
@@ -816,6 +866,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<label class="btn block" style="margin-top:10px" for="fo">' + (i.foto ? 'Trocar foto' : 'Tirar ou escolher foto') + '</label>' +
       '<input type="file" id="fo" accept="image/*" hidden>' +
       '<label class="f" for="nm">Nome do item</label><input type="text" id="nm" value="' + esc(i.nome) + '" placeholder="Ex.: Bandeja espelhada retangular" required>' +
+      '<div id="parec" class="parec" hidden></div>' +
       '<label class="f">Como controlar</label><div class="seg" id="tp"><button type="button" data-tp="">Por quantidade</button><button type="button" data-tp="equipamento">Equipamento numerado</button></div>' +
       '<p class="hint" id="tph"></p>' +
       '<div id="b-qt"><label class="f" for="qt">Quantidade total</label><input type="number" id="qt" min="0" inputmode="numeric" value="' + esc(i.qtd_total) + '"></div>' +
@@ -844,11 +895,31 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         .catch(function (e) { S.erro = e.message; mostrarErro(); });
     };
     $('cn').onclick = voltar;
+    // Antes de cadastrar, mostra os itens com nome parecido (evita "Bandeja inox retangular" e "Bandeja retangular inox")
+    function usarNoEvento(id) {
+      var ant = S.stack[S.stack.length - 1];
+      if (ant && ant.view === 'montar' && ant.p.qtd) { ant.p.qtd[id] = (ant.p.qtd[id] || 0) + 1; ls('rm-' + doEv.id, ant.p.qtd); ant.p.q = ''; }
+      S.q = ''; voltar();
+    }
+    function verParecidos() {
+      if (S.p.id) return;
+      var l = parecidos($('nm').value), b = $('parec');
+      b.hidden = !l.length;
+      b.innerHTML = l.length ? '<b>Já existe algo parecido?</b> Confira antes de cadastrar um item novo:' + l.map(function (x) {
+        return '<div class="li static"><div class="ph">' + foto(x) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(x)) + '</div><div class="hint">' + esc(x.grupo) + (x.subgrupo ? ' · ' + esc(x.subgrupo) : '') + '</div></div>' +
+          (doEv ? '<button type="button" class="btn" data-usar="' + x.id + '">Usar este</button>' : '') + '</div>';
+      }).join('') : '';
+      b.querySelectorAll('[data-usar]').forEach(function (x) { x.onclick = function () { usarNoEvento(x.dataset.usar); toast('Item incluído na lista'); }; });
+    }
+    $('nm').oninput = verParecidos; verParecidos();
     $('ok').onclick = function () {
       fazer(this, api('salvarItem', { item: { id: S.p.id, nome: $('nm').value, tipo: tipo, numero: $('nu').value, unidades: $('un') ? $('un').value : 1,
         grupo: $('gr').value, subgrupo: $('sg').value, categoria: $('ct').value, qtd_total: $('qt').value, custo: $('cu').value.replace(/[^\d,.]/g, ''),
         descricao: $('ds').value, fotoNova: nova } }),
-        function (r) { toast(r && r.criados > 1 ? r.criados + ' unidades cadastradas' : 'Item salvo'); voltar(); });
+        function (r) {
+          toast(r && r.criados > 1 ? r.criados + ' unidades cadastradas' : doEv ? 'Item cadastrado e incluído na lista' : 'Item salvo');
+          if (doEv && r && r.id) usarNoEvento(r.id); else voltar();
+        });
     };
   };
 
@@ -1081,6 +1152,8 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     header('Escalar equipe', true);
     $('bk').onclick = function () { if (!S.p.mudou || confirm('Sair sem salvar a equipe?')) voltar(); };
     $('app').innerHTML = '<div class="panel" style="margin-bottom:12px"><b>' + esc(e.nome) + '</b><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + '</div></div>' +
+      ((e.tentativas || []).length ? '<div class="parec" style="margin:0 0 12px"><b>Tentaram abrir o link e não estão na equipe:</b><div class="chips" style="margin-top:6px">' +
+        e.tentativas.map(function (x, k) { return '<button type="button" class="chip" data-tn="' + k + '">' + esc(x.nome) + '</button>'; }).join('') + '</div><p class="hint" style="margin:4px 0 0">Toque no nome para procurar no cadastro.</p></div>' : '') +
       '<label class="f" for="pq" style="margin-top:0">Incluir pessoa</label><div class="search"><input type="search" id="pq" placeholder="Digite o primeiro nome…" autocomplete="off" aria-label="Digite o primeiro nome"></div><div id="pr" class="list" style="margin-top:6px"></div>' +
       '<div class="row" style="margin-top:10px;gap:8px"><button type="button" class="btn" id="dit">🎤 Ditar nomes</button><button type="button" class="btn" id="clg">Colar lista</button></div>' +
       '<h2>Na equipe (<span id="pn">' + prest.length + '</span>)</h2><div id="pl"></div><div id="erro" class="err" hidden></div>';
@@ -1126,6 +1199,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     bar('<button class="btn primary block" id="ok"' + (S.p.mudou ? '' : ' disabled') + '>' + (S.p.mudou ? 'Salvar equipe (' + prest.length + ')' : 'Equipe salva') + '</button>');
     linhas();
     $('pq').oninput = achar;
+    document.querySelectorAll('[data-tn]').forEach(function (b) { b.onclick = function () { var n = e.tentativas[+b.dataset.tn].nome.trim().split(/\s+/); $('pq').value = n[0] + (n.length > 1 ? ' ' + n[n.length - 1] : ''); achar(); if (!$('pr').querySelector('[data-pe],[data-rt]')) { $('pq').value = n[0]; achar(); } $('pq').scrollIntoView({ block: 'center' }); }; });
     function incluir(x) { prest.push({ id: x.id, nome: x.nome, apelido: x.escala, telefone: x.telefone, secao: setorDe(x.funcao), funcao: funcaoDe(x.funcao) }); }
     // Lista colada ou ditada: nomes ou telefones separados por vírgula ou linha. Só marca quem achar com certeza no cadastro;
     // ditando (fala), também aceita os nomes emendados e o primeiro nome quando só uma pessoa tem esse nome.
@@ -1318,7 +1392,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var proxDia = e.status === 'em_evento' ? serieEv.filter(function (y) { return y.status === 'montando' && y.data >= e.data; })[0] : null;
     var diaAnt = e.status === 'montando' ? serieEv.filter(function (y) { return y.status === 'em_evento' && y.data <= e.data; }).pop() : null;
     var podePassar = podeLista(e) || souPrestador(e);
-    var h = (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + statusTxt(e) + '</span><span class="hint">' + pecas + ' peças</span></div>' +
+    var tts = s && s.escala ? e.tentativas || [] : [];
+    var h = (tts.length ? '<div class="parec" style="margin:0 0 12px;border-color:var(--bad)"><b>' + tts.length + (tts.length > 1 ? ' pessoas tentaram' : ' pessoa tentou') + ' abrir o link e não ' + (tts.length > 1 ? 'estão' : 'está') + ' na equipe:</b> ' +
+      esc(tts.map(function (x) { return x.nome; }).join(', ')) + (podeEsc ? '<div style="margin-top:8px"><button class="btn" id="ttesc">Ver na escala</button></div>' : '') + '</div>' : '') +
+      (s ? '<div class="tools" style="margin-bottom:10px">' + (podeEsc ? '<button class="btn primary" id="escalar">Escalar equipe (' + e.prestadores.length + ')</button>' : '') + '<button class="btn' + (podeEsc ? '' : ' primary') + '" id="lnk">Link para o grupo do evento</button></div>' : '') + '<div class="panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill ' + e.status + '">' + statusTxt(e) + '</span><span class="hint">' + pecas + ' peças</span></div>' +
       '<dl class="kv" style="margin-top:12px"><dt>Data</dt><dd>' + dataBR(e.data) + (e.hora_inicio ? ', ' + esc(e.hora_inicio) + (e.hora_fim ? ' às ' + esc(e.hora_fim) : '') : '') +
       (e.na_agenda ? '<br><span class="hint">Na Agenda Google</span>' : '') + '</dd>' + (e.local ? '<dt>Local</dt><dd>' + esc(e.local) + '</dd>' : '') +
       '<dt>Equipe</dt><dd>' + (e.prestadores.length ? '<a href="#" id="veq">Ver equipe (' + e.prestadores.length + ')</a>' : 'ninguém marcado') + '</dd>' +
@@ -1357,10 +1434,11 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
         '<div class="qty">' + (l.qtd_saida ? 'Saiu <b>' + l.qtd_saida + '</b>' : '') + (l.qtd_extra ? (l.qtd_saida ? ' · ' : '') + '<b>+' + l.qtd_extra + ' extra</b>' : '') +
         (ch != null ? ' · Chegou <b' + (chDif ? ' style="color:var(--bad)"' : '') + '>' + ch + '</b>' : '') + (ret ? ' · Voltou <b>' + l.qtd_retorno + '</b>' : '') + '</div>' +
         (l.qtd_extra && l.extra_por ? '<div class="hint">Extra pedido por ' + esc(l.extra_por) + '</div>' : '') +
+        (ret && l.qtd_retorno > tot(l) ? '<div class="hint" style="color:var(--terra)">Voltaram ' + (l.qtd_retorno - tot(l)) + ' a mais do que saíram' + (l.justificativa ? ': ' + esc(l.justificativa) : '') + '. Confira a quantidade que saiu.</div>' : '') +
         (falt ? '<div class="hint" style="color:var(--bad)">Faltaram ' + (tot(l) - l.qtd_retorno) + ': ' + esc([l.motivo, l.justificativa].filter(Boolean).join(' — ')) +
           ({ pendente: ' · perda aguardando confirmação', confirmada: ' · perda confirmada', recusada: ' · material encontrado' }[l.perda] || '') + '</div>' + fotosFalta(l) : '') +
         (s && s.papel === 'master' && e.status === 'concluido' && ret && l.id && l.perda !== 'confirmada' ? '<div><a href="#" class="hint" data-cs="' + esc(l.id) + '">Corrigir quantidade que saiu</a></div>' : '') + '</div>' +
-        (falt ? '<span class="pill falta">−' + (tot(l) - l.qtd_retorno) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
+        (falt ? '<span class="pill falta">−' + (tot(l) - l.qtd_retorno) + '</span>' : ret && l.qtd_retorno > tot(l) ? '<span class="pill montando">+' + (l.qtd_retorno - tot(l)) + '</span>' : ret ? '<span class="pill concluido">OK</span>' : '') + '</div>';
     }
     if (!e.linhas.length) h += '<div class="empty">Nenhum material separado ainda.' + (s ? '<br>Toque em “Separar material”.' : '') + '</div>';
     else h += gEv.filter(function (g) { return aba === 'Todos' || g[0] === aba; }).map(function (g) {
@@ -1394,6 +1472,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       };
     });
     if ($('escalar')) $('escalar').onclick = function () { ir('escalar', { id: e.id }); };
+    if ($('ttesc')) $('ttesc').onclick = function () { ir('escalar', { id: e.id }); };
     if ($('cgd')) $('cgd').onclick = function (x) {
       x.preventDefault();
       var nomes = e.prestadores.map(function (p) { return apelido(p); });
@@ -1519,14 +1598,24 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       if (L === Infinity) return 'estoque não contado';
       return L + ' livres nesta data' + (c ? ' · ' + c.qtd + ' em ' + esc(c.evs.join(', ')) : '');
     }
-    $('app').innerHTML = busca() + '<div class="tools"><button class="btn" id="qr">📷 Ler QR</button></div>' +
-      '<p class="hint" style="margin:4px 0 10px">Use + e − ou digite a quantidade. Equipamentos numerados: toque em “Separar”.</p><div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
+    var podeCad = !!(sess() && sess().inventario);
+    $('app').innerHTML = busca() + '<div class="tools"><button class="btn" id="qr">📷 Ler QR</button><button class="btn" id="sosep" aria-pressed="false">Só os separados</button></div>' +
+      '<p class="hint" style="margin:4px 0 10px">Use + e − ou digite a quantidade. Equipamentos numerados: toque em “Separar”. A lista fica em ordem alfabética.</p><div id="lst" class="list"></div>' +
+      '<div class="novoit" id="novoit"></div><div id="erro" class="err" hidden></div>';
+    var soSep = false;
+    $('sosep').onclick = function () { soSep = !soSep; this.classList.toggle('on', soSep); this.setAttribute('aria-pressed', soSep); desenhar(); };
     function total() {
       var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } });
-      $('tot').textContent = n + ' itens · ' + p + ' peças';
+      $('tot').textContent = n + (n === 1 ? ' item · ' : ' itens · ') + p + (p === 1 ? ' peça' : ' peças');
     }
     function desenhar() {
-      var l = filtrar(S.data.itens).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || cmpNome(a, b); });
+      S.so = soSep ? function (i) { return qtd[i.id] > 0; } : null;
+      var l = filtrar(S.data.itens).sort(cmpNome); S.so = null;
+      var ns = Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).length;
+      $('sosep').textContent = soSep ? '✓ Só os separados (' + ns + ')' : 'Só os separados (' + ns + ')';
+      $('novoit').innerHTML = S.q.trim() && podeCad ? '<p class="hint">' + (l.length ? 'Não é nenhum desses?' : 'Nenhum item com “' + esc(S.q.trim()) + '”.') + '</p><button class="btn" id="cadnovo">+ Cadastrar “' + esc(S.q.trim()) + '” e pôr na lista</button>'
+        : S.q.trim() && !l.length ? '<p class="hint">Não achou? Peça ao estoque para cadastrar o item.</p>' : '';
+      if ($('cadnovo')) $('cadnovo').onclick = function () { ir('item', { nome: S.q.trim(), ev: e.id }); };
       function linhaM(i) {
         var L = livre(i), q = qtd[i.id] || 0;
         return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(i)) + '</div><div class="qty">' + info(i) + '</div></div>' +
@@ -1565,7 +1654,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     };
     function linhas() { return Object.keys(qtd).filter(function (k) { return qtd[k] > 0; }).map(function (k) { return { item_id: k, qtd: qtd[k] }; }); }
     $('ok').onclick = function () {
-      fazer(this, api('salvarListaEvento', { evento_id: e.id, linhas: linhas() }), function () { ls(chave, null); toast('Lista salva'); voltar(); });
+      fazer(this, api('salvarListaEvento', { evento_id: e.id, linhas: linhas() }), function () { ls(chave, null); toast('Lista salva. Pode continuar separando.'); $('ok').disabled = false; });
     };
     $('fecha').onclick = function () {
       if (!linhas().length) { toast('Separe pelo menos um item antes de fechar.'); return; }
@@ -1583,15 +1672,15 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     function consumo(id) { return (S.data.consumo || []).indexOf(grupoDoItem(id)) >= 0; }
     function guardar() { ls(chave, R); }
     var motivos = S.data.motivos || [];
-    $('app').innerHTML = '<p class="sub">Conte o que voltou. Se voltou menos, escolha o motivo. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
+    $('app').innerHTML = '<p class="sub">Conte o que voltou. Se voltou menos, escolha o motivo. Se voltou mais, digite o número certo mesmo assim. Em ' + esc((S.data.consumo || []).join(', ')) + ' o motivo já vem como “Consumido”.</p>' +
       '<div class="tools"><button class="btn" id="tudo">Voltou tudo certo</button><button class="btn" id="qr">📷 Ler QR</button></div><div style="height:6px"></div>' +
       agrupar(e.linhas, function (l) { return grupoDoItem(l.item_id); }).map(function (g) { return cabGrupo(g[0], g[1].length) + porSub(g[0], g[1], itemDaLinha, function (l) {
         var it = item(l.item_id) || { nome: l.nome }, id = l.item_id, cons = consumo(id), eq = ehEq(it);
         return '<div class="ret" id="r-' + id + '"><div class="top"><div class="ph">' + foto(it) + '</div><div class="mid" style="flex:1;min-width:0"><div class="nm" style="font-weight:600">' + esc(nomeIt(it)) + '</div><div class="qty">Saiu <b>' + tot(l) + '</b></div></div>' +
           (eq ? '<input type="hidden" id="v-' + id + '"><div class="seg" style="flex:none;width:180px"><button type="button" class="ok" data-ev1="' + id + '">Voltou</button><button type="button" class="no" data-ev0="' + id + '">Não voltou</button></div>'
-          : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" max="' + tot(l) + '" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
-          '<div data-j="' + id + '" hidden><label class="f" style="margin-top:0" for="m-' + id + '">Motivo</label><select id="m-' + id + '" data-mm="' + id + '">' +
-          (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>' +
+          : '<div><label class="hint" for="v-' + id + '">Voltou</label><input type="number" min="0" inputmode="numeric" id="v-' + id + '" data-v="' + id + '" style="width:84px;text-align:center"></div>') + '</div>' +
+          '<div data-j="' + id + '" hidden><p class="hint" id="am-' + id + '" style="color:var(--terra);margin:0" hidden></p><div id="mw-' + id + '"><label class="f" style="margin-top:0" for="m-' + id + '">Motivo</label><select id="m-' + id + '" data-mm="' + id + '">' +
+          (cons ? '' : '<option value="">Escolha o motivo…</option>') + motivos.map(function (m) { return '<option' + ((cons && m === 'Consumido') ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select></div>' +
           '<label class="f" for="j-' + id + '">Detalhe (opcional; obrigatório em “Outro”)</label><textarea id="j-' + id + '" data-jj="' + id + '" placeholder="Ex.: 2 taças quebraram durante o serviço"></textarea>' +
           '<div class="fts" id="fs-' + id + '"></div><label class="btn" style="margin-top:8px" for="fi-' + id + '" id="fl-' + id + '">📷 Adicionar foto</label><input type="file" accept="image/*" id="fi-' + id + '" data-ff="' + id + '" hidden>' +
           '<p class="hint" style="margin:4px 0 0">Opcional, até 3 fotos (ex.: peça quebrada).</p></div></div>';
@@ -1601,8 +1690,10 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       '<datalist id="cfl">' + nomesEquipe(e) + '</datalist><div id="erro" class="err" hidden></div>';
     function linha(id) { return e.linhas.filter(function (x) { return x.item_id === id; })[0]; }
     function upd(id) {
-      var l = linha(id), v = $('v-' + id).value, falta = v !== '' && +v < tot(l);
-      document.querySelector('[data-j="' + id + '"]').hidden = !falta;
+      var l = linha(id), v = $('v-' + id).value, falta = v !== '' && +v < tot(l), mais = v !== '' && +v > tot(l);
+      document.querySelector('[data-j="' + id + '"]').hidden = !falta && !mais;
+      $('mw-' + id).hidden = mais; $('am-' + id).hidden = !mais;
+      if (mais) $('am-' + id).textContent = 'Voltaram ' + (+v - tot(l)) + ' a mais do que saíram. Confira a contagem. Se estiver certo, pode registrar assim: o estoque é avisado para corrigir a saída. Se souber, conte no detalhe de onde veio.';
       $('r-' + id).classList.toggle('short', falta && !consumo(id));
       var b1 = document.querySelector('[data-ev1="' + id + '"]'), b0 = document.querySelector('[data-ev0="' + id + '"]');
       if (b1) { b1.classList.toggle('on', v !== '' && +v >= tot(l)); b0.classList.toggle('on', falta); }
@@ -1730,7 +1821,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
     var qtd = S.p.qtd || (S.p.qtd = {});
     $('app').innerHTML = '<p class="sub">Material que foi enviado ou pedido depois do início do evento. Entra como extra; a lista fechada de saída continua igual.</p>' + busca() + '<div id="lst" class="list"></div><div id="erro" class="err" hidden></div>';
     function desenhar() {
-      var l = filtrar(S.data.itens || []).sort(function (a, b) { return (qtd[b.id] > 0) - (qtd[a.id] > 0) || cmpNome(a, b); }).slice(0, 150);
+      var l = filtrar(S.data.itens || []).sort(cmpNome).slice(0, 150);
       $('lst').innerHTML = l.length ? l.map(function (i) {
         var q = qtd[i.id] || 0, ja = e.linhas.filter(function (x) { return x.item_id === i.id; })[0];
         return '<div class="li static pick"><div class="ph">' + foto(i) + '</div><div class="mid"><div class="nm">' + esc(nomeIt(i)) + '</div><div class="qty">' + (ja ? 'No evento: ' + tot(ja) : 'Fora da lista') + '</div></div>' +
@@ -1742,7 +1833,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       document.querySelectorAll('[data-q]').forEach(function (x) { x.onchange = function () { set(x.dataset.q, parseInt(x.value, 10)); }; });
     }
     function set(id, v) { qtd[id] = Math.max(0, v || 0); var inp = document.querySelector('[data-q="' + id + '"]'); if (inp) inp.value = qtd[id] || ''; total(); }
-    function total() { var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } }); $('tot').textContent = n + ' itens · ' + p + ' peças'; }
+    function total() { var n = 0, p = 0; Object.keys(qtd).forEach(function (k) { if (qtd[k] > 0) { n++; p += qtd[k]; } }); $('tot').textContent = n + (n === 1 ? ' item · ' : ' itens · ') + p + (p === 1 ? ' peça' : ' peças'); }
     bar('<span id="tot" class="hint" style="flex:1"></span><button class="btn primary" id="ok">Adicionar extra</button>');
     ligarBusca(desenhar); desenhar(); total();
     $('ok').onclick = function () {
@@ -1948,7 +2039,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   };
 
   V.perdas = function () {
-    var l = S.data.perdas || [];
+    var l = (S.data.perdas || []).slice().sort(function (a, b) { return sem(a.nome).localeCompare(sem(b.nome)) || String(a.data).localeCompare(String(b.data)); });
     header('Perdas para confirmar', true);
     bar('');
     $('app').innerHTML = '<p class="sub">Material que voltou a menos. Confirme a perda para dar baixa no inventário, ou marque como encontrado.</p>' +
@@ -2055,7 +2146,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
   V.pessoas = function () {
     header('Equipe e senhas', true);
     bar('<button class="btn primary" id="novo">+ Cadastrar pessoa</button>');
-    var ps = S.data.pessoas || [];
+    var ps = (S.data.pessoas || []).slice().sort(function (a, b) { return sem(a.nome).localeCompare(sem(b.nome)); });
     $('app').innerHTML = '<h2>Equipe</h2><p class="sub">Cada pessoa tem uma senha pessoal. Marque quem é Master (acesso total), quem cuida do estoque e quem faz a coordenação da equipe (cadastro e escala). Coordenadores (maîtres) não usam senha: são marcados na equipe de cada evento.</p>' +
       (ps.length ? '<div class="list">' + ps.map(function (p) {
         return '<button class="li" data-p="' + p.id + '"><div class="mid"><div class="nm">' + esc(p.nome) + '</div><div class="hint">' + esc(p.telefone) + '</div></div>' +
