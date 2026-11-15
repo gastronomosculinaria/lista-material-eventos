@@ -1037,7 +1037,7 @@ h4.sub { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; colo
       var pecas = e.linhas.reduce(function (t, l) { return t + tot(l); }, 0);
       var falta = e.status === 'concluido' && e.linhas.some(function (l) { return l.qtd_retorno < tot(l); });
       return '<button class="li" data-ev="' + e.id + '"><div class="mid"><div class="nm">' + esc(e.nome) + '</div><div class="hint">' + dataBR(e.data) + (e.local ? ' · ' + esc(e.local) : '') + ' · ' + pecas + ' peças</div></div>' +
-        '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Faltou material' : statusTxt(e)) + '</span></button>';
+        '<span class="pill ' + (falta ? 'falta' : e.status) + '">' + (falta ? 'Retornado · com faltas' : statusTxt(e)) + '</span></button>';
     }).join('') + '</div>' : '<div class="empty">Nenhum evento com lista de material ainda.' + (s ? '<br>Escolha um compromisso da agenda abaixo ou toque em “Novo evento”.' : '<br>O estoquista cria os eventos na Área da equipe.') + '</div>';
     if (s && (s.estoque || s.escala) && S.data.agenda) $('app').innerHTML += '<h2>Na sua agenda</h2><p class="sub">Próximos 90 dias, ainda não abertos aqui.</p><div id="agl"><div class="loading">Lendo sua Agenda Google…</div></div>';
     document.querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { ir('evento', { id: b.dataset.ev }); }; });
