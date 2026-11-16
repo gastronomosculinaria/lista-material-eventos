@@ -151,7 +151,8 @@ var CORE = (function () {
     var conf = {};
     db.all('eventos').forEach(function (y) {
       if (y.status === 'concluido' || (ev && y.id === ev.id)) return;
-      if (ev && ev.serie && y.serie === ev.serie) return;
+      // o primeiro dia da série pode ainda não ter a coluna serie preenchida (ela é o id dele): também não conta
+      if (ev && ev.serie && (y.serie === ev.serie || y.id === ev.serie)) return;
       if (y.status === 'em_evento' || (ev && ev.data && y.data === ev.data)) conf[y.id] = y;
     });
     return somarPorSerie(db, conf);
