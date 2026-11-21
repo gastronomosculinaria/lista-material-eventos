@@ -192,6 +192,19 @@ var CORE = (function () {
     if (c.toLowerCase() === semCochete(quem.nome) || p.sozinho) return texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 60) + ' (conferiu sozinho)';
     return c;
   }
+  // Conferência dividida (2026-11-21): cada pessoa conta uma parte. Quem anota guarda o nome; ninguém apaga
+  // sem saber o número que um colega já gravou (x.base = hora da anotação que a pessoa viu na tela).
+  function semNomeExtra(n) { return texto(String(n || '').replace(/\s*\[.*\]\s*$/, ''), 80); }
+  function chaveP(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function outraPessoa(ant, por) { return !!(ant && ant.por && chaveP(ant.por) !== chaveP(por)); }
+  function conflitoAnot(ant, x, por) { return x.base !== undefined && outraPessoa(ant, por) && String(x.base || '') !== String(ant.em || ''); }
+  // quem contou cada item: vale a anotação se o número enviado é o mesmo; senão, quem enviou
+  function contouItem(ant, q, quem) { return ant && ant.por && num(ant.q) === q ? texto(ant.por, 80) : semNomeExtra(quem.nome); }
+  function resumoQuem(nomes) {
+    var c = {}, ordem = [];
+    nomes.forEach(function (n) { if (!n) return; if (!c[n]) { c[n] = 0; ordem.push(n); } c[n]++; });
+    return ordem.map(function (n) { return n + ' (' + c[n] + (c[n] > 1 ? ' itens' : ' item') + ')'; }).join(', ');
+  }
   function moeda(v) { return 'R$ ' + (Math.round(v * 100) / 100).toFixed(2).replace('.', ','); }
 
   function pedeEquipe(s) { if (!s) falha('Entre com sua senha na Área da equipe para fazer isso.'); }
@@ -546,7 +559,8 @@ var CORE = (function () {
               qtd_chegada: l.qtd_chegada === '' || l.qtd_chegada == null ? null : num(l.qtd_chegada), extra_por: l.extra_por || '',
               qtd_retorno: l.qtd_retorno === '' || l.qtd_retorno == null ? null : num(l.qtd_retorno),
               justificativa: l.justificativa, motivo: l.motivo || '', perda: l.perda || '', fotos: json(l.fotos, []),
-              parcial: e.status === 'em_evento' ? json(l.parcial, null) : null, parcial_chegada: e.status === 'em_evento' ? json(l.parcial_chegada, null) : null };
+              parcial: e.status === 'em_evento' ? json(l.parcial, null) : null, parcial_chegada: e.status === 'em_evento' ? json(l.parcial_chegada, null) : null,
+              contou_chegada: l.contou_chegada || '', contou_retorno: l.contou_retorno || '' };
           }) };
       }).concat(outros);
       var out = { itens: itens, eventos: eventos, sessao: s, convite: conv, categorias: CATEGORIAS, agenda: !!db.agenda, grupos: listaGrupos(db, itens), subgrupos: mapaSubgrupos(db, itens), consumo: CONSUMO, motivos: MOTIVOS,
@@ -1135,15 +1149,16 @@ var CORE = (function () {
       if (!ev) falha('Evento não encontrado.');
       naEquipeDoEvento(s, conv, ev);
       if (ev.status !== 'em_evento') falha('A conferência da chegada é feita com o material já no evento.');
-      var envio = {}, difs = [];
+      var envio = {}, difs = [], contaram = [];
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
       linhas.forEach(function (l) {
         var e = envio[l.item_id];
         if (!e || e.qtd === '' || e.qtd == null) falha('Informe quantos chegaram de "' + l.item_nome + '".');
-        var q = Math.max(0, Math.round(num(e.qtd)));
+        var q = Math.max(0, Math.round(num(e.qtd))), quemC = contouItem(json(l.parcial_chegada, null), q, quem);
         if (q !== totalLinha(l)) difs.push(l.item_nome + ': chegaram ' + q + ' de ' + totalLinha(l));
-        db.update('evento_itens', l.id, { qtd_chegada: String(q), parcial_chegada: '' });
+        contaram.push(quemC);
+        db.update('evento_itens', l.id, { qtd_chegada: String(q), parcial_chegada: '', contou_chegada: quemC });
       });
       var alu = aluguelDe(ev);
       if (alu && (alu.itens.length || alu.fotos.length)) {
@@ -1160,7 +1175,7 @@ var CORE = (function () {
       }
       var obs = texto(p.obs, 500);
       db.update('eventos', ev.id, { chegada_por: quem.nome, chegada_em: agora(), chegada_status: difs.length || obs ? 'diferenca' : 'ok', chegada_obs: obs, chegada_revisao: '' });
-      log(db, quem, 'Conferiu a chegada do material no evento', ev.nome + (difs.length ? ' — diferenças: ' + difs.join('; ') : ' — chegou tudo certo') + (obs ? ' | Obs.: ' + obs : ''));
+      log(db, quem, 'Conferiu a chegada do material no evento', ev.nome + (difs.length ? ' — diferenças: ' + difs.join('; ') : ' — chegou tudo certo') + (obs ? ' | Obs.: ' + obs : '') + ' | Contado por ' + resumoQuem(contaram));
       return { difs: difs.length };
     },
 
@@ -1312,18 +1327,19 @@ var CORE = (function () {
       if (!ev) falha('Evento não encontrado.');
       naEquipeDoEvento(s, conv, ev);
       if (ev.status !== 'em_evento') return { fechado: true };
-      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 80), feitos = [];
+      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = semNomeExtra(quem.nome), feitos = [], conflitos = [];
       (p.itens || []).forEach(function (x) {
         var l = linhas.filter(function (y) { return y.item_id === x.item_id; })[0];
         if (!l) return;
         var ant = json(l.parcial_chegada, null);
-        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) return;
+        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) { conflitos.push({ item_id: l.item_id, q: ant.q, por: ant.por, em: ant.em }); return; }
+        if (conflitoAnot(ant, x, por)) { conflitos.push({ item_id: l.item_id, q: ant.q, por: ant.por, em: ant.em }); return; } // um colega já contou: não apaga
         var vazio = x.qtd === '' || x.qtd == null;
         db.update('evento_itens', l.id, { parcial_chegada: vazio ? '' : JSON.stringify({ q: Math.max(0, Math.round(num(x.qtd))), por: por, em: texto(x.em, 30) || agora() }) });
         feitos.push((vazio ? 'apagou ' : num(x.qtd) + '/' + totalLinha(l) + ' ') + l.item_nome);
       });
       if (feitos.length) log(db, quem, 'Anotou a chegada do material', ev.nome + ': ' + feitos.join(', '));
-      return { anotados: feitos.length };
+      return { anotados: feitos.length, conflitos: conflitos };
     },
 
     // Cada pessoa anota as quantidades que já contou, em horários diferentes (2026-11-15). Não encerra o evento.
@@ -1335,7 +1351,7 @@ var CORE = (function () {
       if (prox && (prox.serie !== ev.serie || !ev.serie)) prox = null;
       if (!s && !(conv && (conv.evento_id === ev.id || (prox && conv.evento_id === prox.id))))
         falha('Só quem está na lista deste evento pode anotar o retorno. Abra pelo link enviado no grupo do evento.');
-      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = texto(String(quem.nome || '').replace(/\s*\[.*\]\s*$/, ''), 80), feitos = [];
+      var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; }), por = semNomeExtra(quem.nome), feitos = [], conflitos = [];
       (p.itens || []).forEach(function (x) {
         var l = linhas.filter(function (y) { return y.item_id === x.item_id; })[0];
         if (!l) return;
@@ -1343,12 +1359,13 @@ var CORE = (function () {
         var dado = vazio ? '' : JSON.stringify({ q: Math.max(0, Math.round(num(x.qtd))), m: MOTIVOS.indexOf(x.motivo) >= 0 ? x.motivo : '', j: texto(x.justificativa, 500),
           f: fotosValidas(x.fotos), por: por, em: texto(x.em, 30) || agora() });
         var ant = json(l.parcial, null);
-        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) return; // já tem uma anotação mais nova de outra pessoa
+        if (ant && x.em && ant.em && String(ant.em) > String(x.em)) { conflitos.push({ item_id: l.item_id, q: ant.q, por: ant.por, em: ant.em }); return; } // já tem uma anotação mais nova
+        if (conflitoAnot(ant, x, por)) { conflitos.push({ item_id: l.item_id, q: ant.q, por: ant.por, em: ant.em }); return; } // um colega já contou: não apaga
         db.update('evento_itens', l.id, { parcial: dado });
         feitos.push((vazio ? 'apagou ' : (num(x.qtd) + '/' + totalLinha(l) + ' ')) + l.item_nome);
       });
       if (feitos.length) log(db, quem, 'Anotou quantidades do retorno', ev.nome + ': ' + feitos.join(', '));
-      return { anotados: feitos.length };
+      return { anotados: feitos.length, conflitos: conflitos };
     },
 
     registrarRetorno: function (db, p, s, quem, conv) {
@@ -1367,7 +1384,7 @@ var CORE = (function () {
       var envio = {};
       (p.linhas || []).forEach(function (l) { envio[l.item_id] = l; });
       var linhas = db.all('evento_itens').filter(function (l) { return l.evento_id === ev.id; });
-      var resumo = [], faltas = [], aMais = [], todosItens = db.all('itens'), confRet = conferente(p, quem), custoTotal = 0;
+      var resumo = [], faltas = [], aMais = [], todosItens = db.all('itens'), confRet = conferente(p, quem), custoTotal = 0, contaram = [];
       linhas.forEach(function (l) {
         var itl = porId(todosItens, l.item_id), consumo = itl && CONSUMO.indexOf(grupoDe(itl)) >= 0;
         var e = envio[l.item_id];
@@ -1384,8 +1401,9 @@ var CORE = (function () {
           if (mot === 'Outro' && !just) falha('Explique em poucas palavras o que aconteceu com "' + l.item_nome + '".');
         } else if (q > saiu) { mot = ''; aMais.push((q - saiu) + ' × ' + l.item_nome + (just ? ' (' + just + ')' : '')); }
         else { mot = ''; just = ''; }
-        var fts = q < saiu ? fotosValidas(e.fotos) : [];
-        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '', parcial: '' });
+        var fts = q < saiu ? fotosValidas(e.fotos) : [], quemC = contouItem(json(l.parcial, null), q, quem);
+        contaram.push(quemC);
+        db.update('evento_itens', l.id, { qtd_retorno: String(q), justificativa: just, motivo: mot, perda: q < saiu ? 'pendente' : '', perda_por: '', fotos: fts.length ? JSON.stringify(fts) : '', parcial: '', contou_retorno: quemC });
         resumo.push(q + '/' + saiu + ' ' + l.item_nome);
         if (q < saiu) {
           var custo = itl ? num(itl.custo) * (saiu - q) : 0; custoTotal += custo;
@@ -1415,7 +1433,7 @@ var CORE = (function () {
       log(db, quem, prox ? 'Contou o material no fim do dia (ficou no local)' : 'Registrou retorno do material', ev.nome + (prox ? ' (' + dataCurta(ev.data) + ' → ' + dataCurta(prox.data) + ')' : '') + ': ' + resumo.join(', ') + aluTxt + passou +
         (aMais.length ? ' | Voltaram a mais (conferir a saída): ' + aMais.join('; ') : '') +
         (faltas.length ? ' | Faltas (aguardando confirmação do Master/estoque): ' + faltas.map(function (f) { return f.falta + ' × ' + f.l.item_nome + ' (' + f.just + ')'; }).join('; ') : '') +
-        (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Conferido por ' + confRet);
+        (custoTotal ? ' | Custo das perdas: ' + moeda(custoTotal) : '') + ' | Contado por ' + resumoQuem(contaram) + ' | Conferido por ' + confRet);
       sincAgenda(db, ev.id, quem);
       if (prox) sincAgenda(db, prox.id, quem);
       return true;
@@ -1580,7 +1598,7 @@ var CORE = (function () {
       'escala_status', 'escala_por', 'escala_em', 'carga', 'descarga', 'serie',
       'lista_estoque', 'chegada_por', 'chegada_em', 'chegada_status', 'chegada_obs', 'chegada_revisao', 'aluguel', 'tentativas'],
     evento_itens: ['id', 'evento_id', 'item_id', 'item_nome', 'qtd_saida', 'qtd_retorno', 'justificativa', 'motivo', 'perda', 'perda_por', 'fotos',
-      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada', 'parcial', 'parcial_chegada'],
+      'qtd_extra', 'extra_por', 'extra_em', 'qtd_chegada', 'parcial', 'parcial_chegada', 'contou_chegada', 'contou_retorno'],
     baixas: ['id', 'item_id', 'item_nome', 'qtd', 'motivo', 'evento_id', 'por', 'em', 'custo'],
     contagens: ['id', 'em', 'por', 'item_id', 'item_nome', 'sistema', 'contado', 'diferenca', 'ajustado'],
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
