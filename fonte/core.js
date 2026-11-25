@@ -376,6 +376,9 @@ var CORE = (function () {
   }
   // O que a pessoa faz no evento. Texto do cadastro só com setores ("Salão/Cozinha/Frete") não é função.
   var SETORES = ['Salão', 'Cozinha', 'Lavagem', 'Frete', 'Barman'];
+  // Frete de cada dia na escala (pedido do usuário, 2026-11-25): o que a pessoa do frete fez, ou o valor combinado.
+  var FRETE = { levou: 'Só levou', levou_buscou: 'Levou e buscou', buscou: 'Só buscou', valor: 'Valor combinado' };
+  function freteTxt(x) { return x && FRETE[x.frete] ? FRETE[x.frete] + (x.frete === 'valor' && x.valor ? ': R$ ' + String(x.valor).replace('.', ',') : '') : ''; }
   function soSetor(f) { return /^\s*((Salão|Cozinha|Lavagem|Frete|Barman)\s*\/?\s*)+$/i.test(String(f || '')); }
   function curto(n) { var w = String(n || '').trim().split(/\s+/); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); }
   function nomeEscala(x) { return x.nome_escala || curto(x.nome); }
@@ -452,7 +455,8 @@ var CORE = (function () {
     var prest = ordemNome(json(ev.prestadores, [])), em = agora(), sem = semanaEscala(ev.data);
     var linhas = prest.map(function (x, i) {
       return { id: ev.id + '-' + i, evento_id: ev.id, semana: sem, data: ev.data, evento: ev.nome, nome: x.apelido || x.nome, secao: x.secao || 'Salão',
-        funcao: (soSetor(x.funcao) ? '' : x.funcao) || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por };
+        funcao: (soSetor(x.funcao) ? '' : x.funcao) || (x.coord ? 'Maitre' : ''), coordenador: x.coord ? 'sim' : '', enviado_em: em, enviado_por: por,
+        frete: FRETE[x.frete] || '', valor: x.frete === 'valor' ? x.valor || '' : '' };
     });
     db.removeWhere('escalas', function (r) { return r.evento_id === ev.id; });
     if (!linhas.length) return;
@@ -973,7 +977,16 @@ var CORE = (function () {
       var podeEquipe = s.escala && (!antigo || antigo.escala_status !== 'enviada' || s.papel === 'master');
       var prest = (e.prestadores || []).map(function (x) {
         var o = { id: texto(x.id, 40), nome: texto(x.nome, 120), telefone: texto(x.telefone, 30), secao: SETORES.indexOf(x.secao) >= 0 ? x.secao : 'Salão', funcao: soSetor(x.funcao) ? '' : texto(x.funcao, 60) };
-        if (x.coord) o.coord = true; return o;
+        if (x.coord) o.coord = true;
+        if (o.secao === 'Frete' && FRETE[x.frete]) {
+          o.frete = x.frete;
+          if (x.frete === 'valor') {
+            var v = Math.round(num(String(x.valor || '').replace(',', '.')) * 100) / 100;
+            if (!(v > 0)) falha('Informe o valor combinado do frete de ' + (o.nome || 'quem faz o frete') + '.');
+            o.valor = String(v);
+          }
+        }
+        return o;
       }).filter(function (x) { return x.nome; });
       if (!podeEquipe) prest = antigo ? json(antigo.prestadores, []) : [];
       if (podeEquipe) prest.forEach(function (x) {
@@ -990,7 +1003,7 @@ var CORE = (function () {
       if (e.id) {
         if (!porId(db.all('eventos'), e.id)) falha('Evento não encontrado.');
         db.update('eventos', e.id, dados);
-        log(db, quem, 'Editou evento', nome + ' — prestadores: ' + prest.map(function (x) { return x.nome + ' ' + x.telefone; }).join(', '));
+        log(db, quem, 'Editou evento', nome + ' — prestadores: ' + prest.map(function (x) { return x.nome + ' ' + x.telefone + (x.frete ? ' (frete: ' + freteTxt(x) + ')' : ''); }).join(', '));
         if (antigo.status !== 'montando' || antigo.escala_status === 'enviada') sincEscalas(db, { id: e.id, nome: nome, data: dados.data, prestadores: dados.prestadores }, antigo.escala_por || texto(p.who && p.who.nome, 80));
         sincAgenda(db, e.id, quem);
         return { id: e.id };
@@ -1604,7 +1617,7 @@ var CORE = (function () {
     pessoas: ['id', 'nome', 'telefone', 'senha_hash', 'pode_inventario', 'ativo', 'criado_em', 'coordenador', 'escala', 'estoque', 'separa'],
     sessoes: ['id', 'pessoa_id', 'criado_em', 'nome', 'telefone'],
     equipe: ['id', 'nome', 'telefone', 'funcao', 'ativo', 'criado_em', 'rg', 'cpf', 'pix', 'bloqueado', 'motivo_bloqueio', 'bloqueado_por', 'origem', 'revisado', 'atualizado_em', 'nome_escala', 'link_em', 'pix_anterior', 'pendente'],
-    escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por'],
+    escalas: ['id', 'evento_id', 'semana', 'data', 'evento', 'nome', 'secao', 'funcao', 'coordenador', 'enviado_em', 'enviado_por', 'frete', 'valor'],
     convites: ['id', 'equipe_id', 'para', 'criado_por', 'criado_em', 'usado_em', 'usado_por', 'cancelado'],
     config: ['id', 'valor'],
     log: ['id', 'em', 'nome', 'telefone', 'acao', 'detalhe']
